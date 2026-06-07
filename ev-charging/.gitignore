@@ -21,7 +21,7 @@ venv/
 __pycache__/
 *.pyc
 *.pyo
-
+firebase.txt
 # Firebase credentials
 serviceAccountKey.json
 # Runtime data
