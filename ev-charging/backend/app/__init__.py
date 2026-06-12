@@ -23,6 +23,7 @@ def create_app():
     from app.routes.ports import ports_bp
     from app.routes.notifications import notifications_bp
     from app.routes.violations import violations_bp
+    from app.routes.sessions import sessions_bp
 
     app.register_blueprint(auth_bp, url_prefix="/api/auth")
     app.register_blueprint(bookings_bp, url_prefix="/api/bookings")
@@ -30,5 +31,6 @@ def create_app():
     app.register_blueprint(ports_bp, url_prefix="/api/ports")
     app.register_blueprint(notifications_bp, url_prefix="/api/notifications")
     app.register_blueprint(violations_bp, url_prefix="/api/violations")
+    app.register_blueprint(sessions_bp, url_prefix="/api/sessions")
 
     return app
