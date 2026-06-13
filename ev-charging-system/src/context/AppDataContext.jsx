@@ -4,6 +4,7 @@ import {
   clearStoredCurrentUser,
   findStoredAccount,
   getStoredCurrentUser,
+  getStoredAccounts,
   setStoredCurrentUser,
   upsertStoredAccount,
 } from "../services/authStorage";
@@ -37,15 +38,24 @@ function mapQueueStatus(status) {
   return dictionary[status] || "Queued";
 }
 
+async function resolveBackendUserByEmail(email) {
+  return apiRequest("/auth/user-by-email", {
+    method: "POST",
+    body: JSON.stringify({ email }),
+  });
+}
+
 export function AppDataProvider({ children }) {
   const [currentUser, setCurrentUser] = useState(() => getStoredCurrentUser());
   const [ports, setPorts] = useState([]);
+  const [vehicles, setVehicles] = useState([]);
   const [userBookings, setUserBookings] = useState([]);
   const [userSessions, setUserSessions] = useState([]);
   const [queueEntries, setQueueEntries] = useState([]);
   const [allSessions, setAllSessions] = useState([]);
+  const [violations, setViolations] = useState([]);
   const [userNamesById, setUserNamesById] = useState({});
-  const [notifications, setNotifications] = useState([]);
+  const [alerts, setAlerts] = useState([]);
 
   const addNotification = useCallback((message, type = "info") => {
     const notice = {
@@ -53,35 +63,39 @@ export function AppDataProvider({ children }) {
       message,
       type,
     };
-    setNotifications((current) => [notice, ...current].slice(0, 8));
+    setAlerts((current) => [notice, ...current].slice(0, 8));
   }, []);
 
   const dismissNotification = useCallback((id) => {
-    setNotifications((current) => current.filter((notice) => notice.id !== id));
+    setAlerts((current) => current.filter((notice) => notice.id !== id));
   }, []);
 
   const loadDashboardData = useCallback(async (user) => {
-    if (!user?.uid) {
-      setPorts([]);
+    const uid = user?.uid || null;
+
+    if (!uid) {
       setUserBookings([]);
       setUserSessions([]);
-      setQueueEntries([]);
-      setAllSessions([]);
+      setVehicles([]);
       setUserNamesById({});
-      return;
+      setViolations([]);
     }
 
     const portsResponse = await apiRequest("/ports/");
     const safePorts = Array.isArray(portsResponse) ? portsResponse : [];
     setPorts(safePorts);
 
-    const [bookingsResponse, sessionsResponse] = await Promise.all([
-      apiRequest(`/bookings/user/${user.uid}`),
-      apiRequest(`/sessions/user/${user.uid}`),
-    ]);
+    if (uid) {
+      const [bookingsResponse, sessionsResponse, vehiclesResponse] = await Promise.all([
+        apiRequest(`/bookings/user/${uid}`),
+        apiRequest(`/sessions/user/${uid}`),
+        apiRequest(`/auth/user/${uid}/vehicles`).catch(() => []),
+      ]);
 
-    setUserBookings(Array.isArray(bookingsResponse) ? bookingsResponse : []);
-    setUserSessions(Array.isArray(sessionsResponse) ? sessionsResponse : []);
+      setUserBookings(Array.isArray(bookingsResponse) ? bookingsResponse : []);
+      setUserSessions(Array.isArray(sessionsResponse) ? sessionsResponse : []);
+      setVehicles(Array.isArray(vehiclesResponse) ? vehiclesResponse : []);
+    }
 
     const queuePerPort = await Promise.all(
       safePorts.map((port) => apiRequest(`/queue/port/${port.port_id}`).catch(() => [])),
@@ -96,7 +110,14 @@ export function AppDataProvider({ children }) {
     setQueueEntries(mergedQueue);
     setAllSessions(mergedSessions);
 
-    const uniqueUserIds = [...new Set([...mergedQueue, ...mergedSessions].map((item) => item.user_id).filter(Boolean))];
+    const uniqueUserIds = [
+      ...new Set([
+        ...mergedQueue.map((item) => item.user_id),
+        ...mergedSessions.map((item) => item.user_id),
+        uid,
+      ].filter(Boolean)),
+    ];
+
     const userResults = await Promise.all(
       uniqueUserIds.map((uid) =>
         apiRequest(`/auth/user/${uid}`)
@@ -111,7 +132,38 @@ export function AppDataProvider({ children }) {
         return acc;
       }, {}),
     );
+
+    const violationsByUser = await Promise.all(
+      uniqueUserIds.map((id) => apiRequest(`/violations/user/${id}`).catch(() => [])),
+    );
+
+    const flattenedViolations = violationsByUser.flat().filter(Boolean);
+    const uniqueViolations = Array.from(
+      new Map(flattenedViolations.map((item) => [item.violation_id, item])).values(),
+    );
+    setViolations(uniqueViolations);
   }, []);
+
+  useEffect(() => {
+    if (currentUser?.uid) {
+      return;
+    }
+
+    const accounts = getStoredAccounts();
+    if (accounts.length === 0) {
+      return;
+    }
+
+    const fallbackAccount = accounts[0];
+    apiRequest(`/auth/user/${fallbackAccount.uid}`)
+      .then((backendUser) => {
+        setStoredCurrentUser(backendUser);
+        setCurrentUser(backendUser);
+      })
+      .catch(() => {
+        // Keep app usable even if no stored user can be restored.
+      });
+  }, [currentUser]);
 
   useEffect(() => {
     loadDashboardData(currentUser).catch((error) => {
@@ -143,72 +195,107 @@ export function AppDataProvider({ children }) {
 
   const registerUser = useCallback(
     async ({ fullName, email, phone, password, role = "driver", vehicleModel, numberPlate, connectorType }) => {
-      const registerResult = await apiRequest("/auth/register", {
-        method: "POST",
-        body: JSON.stringify({
-          email,
-          password,
-          name: fullName,
-          phone,
-          role,
-        }),
-      });
+      try {
+        const registerResult = await apiRequest("/auth/register", {
+          method: "POST",
+          body: JSON.stringify({
+            email,
+            password,
+            name: fullName,
+            phone,
+            role,
+            vehicle_model: vehicleModel,
+            number_plate: numberPlate,
+            connector_type: connectorType || "Type 2",
+          }),
+        });
 
-      const uid = registerResult?.uid;
-      if (!uid) {
-        throw new Error("Registration succeeded but no user id was returned.");
+        const uid = registerResult?.uid;
+        if (!uid) {
+          throw new Error("Registration succeeded but no user id was returned.");
+        }
+
+        upsertStoredAccount({ email, password, uid, role });
+        const backendUser = await apiRequest(`/auth/user/${uid}`);
+        setStoredCurrentUser(backendUser);
+        setCurrentUser(backendUser);
+        addNotification("Account created and synced with backend.", "success");
+        return backendUser;
+      } catch (error) {
+        const message = String(error?.message || "");
+        if (message.includes("EMAIL_EXISTS") || message.toLowerCase().includes("already exists")) {
+          throw new Error("An account with this email already exists. Please sign in instead.");
+        }
+        throw error;
       }
-
-      await apiRequest(`/auth/user/${uid}/vehicles`, {
-        method: "POST",
-        body: JSON.stringify({
-          vehicle_model: vehicleModel || "EV Model",
-          number_plate: numberPlate || `EV-${Math.floor(1000 + Math.random() * 9000)}`,
-          connector_type: connectorType || "Type 2",
-        }),
-      });
-
-      upsertStoredAccount({ email, password, uid, role });
-      const backendUser = await apiRequest(`/auth/user/${uid}`);
-      setStoredCurrentUser(backendUser);
-      setCurrentUser(backendUser);
-      addNotification("Account created and synced with backend.", "success");
-      return backendUser;
     },
     [addNotification],
   );
 
   const loginUser = useCallback(async (email, password) => {
     const account = findStoredAccount(email, password);
-    if (!account) {
-      throw new Error("Account not found in this browser. Register first on this device.");
+    let backendUser;
+
+    if (account?.uid) {
+      backendUser = await apiRequest(`/auth/user/${account.uid}`);
+    } else {
+      backendUser = await resolveBackendUserByEmail(email);
+      if (!backendUser?.uid) {
+        throw new Error("Unable to find this account in the backend. Please register first.");
+      }
+
+      upsertStoredAccount({
+        email,
+        password,
+        uid: backendUser.uid,
+        role: backendUser.role || "driver",
+      });
     }
 
-    const backendUser = await apiRequest(`/auth/user/${account.uid}`);
     setStoredCurrentUser(backendUser);
     setCurrentUser(backendUser);
-    addNotification("Login successful.", "success");
     return backendUser;
-  }, [addNotification]);
+  }, []);
 
   const logoutUser = useCallback(() => {
     clearStoredCurrentUser();
     setCurrentUser(null);
-    setNotifications([]);
+    setAlerts([]);
   }, []);
 
   const createBooking = useCallback(
-    async ({ stationId, batteryPercentage }) => {
+    async (payload) => {
       if (!currentUser?.uid) {
         throw new Error("Please log in first.");
       }
+
+      const stationId = payload?.port_id || payload?.stationId;
+      const selectedVehicleId = payload?.vehicle_id || payload?.vehicleId;
+      const isPriority =
+        typeof payload?.is_priority === "boolean"
+          ? payload.is_priority
+          : false;
+      const batteryLevelValue =
+        payload?.battery_level ?? payload?.batteryLevel ?? payload?.batteryPercentage;
+      const preferredTime = payload?.preferred_time ?? payload?.preferredTime ?? null;
 
       const selectedPort = ports.find((port) => port.port_id === stationId);
       if (!selectedPort) {
         throw new Error("Select a valid charging port.");
       }
 
-      const vehicleId = await ensureDefaultVehicle(currentUser.uid, selectedPort.connector_type || "Type 2");
+      const vehicleId =
+        selectedVehicleId ||
+        (await ensureDefaultVehicle(currentUser.uid, selectedPort.connector_type || "Type 2"));
+
+      const batteryLevel =
+        batteryLevelValue === null || batteryLevelValue === undefined || batteryLevelValue === ""
+          ? null
+          : Number(batteryLevelValue);
+
+      if (isPriority && (Number.isNaN(batteryLevel) || batteryLevel < 1 || batteryLevel > 100)) {
+        throw new Error("Battery level must be between 1 and 100 for priority bookings.");
+      }
 
       const bookingResult = await apiRequest("/bookings/", {
         method: "POST",
@@ -216,8 +303,9 @@ export function AppDataProvider({ children }) {
           user_id: currentUser.uid,
           vehicle_id: vehicleId,
           port_id: stationId,
-          is_priority: true,
-          battery_level: Number(batteryPercentage),
+          is_priority: isPriority,
+          battery_level: isPriority ? batteryLevel : null,
+          preferred_time: preferredTime,
         }),
       });
 
@@ -234,8 +322,9 @@ export function AppDataProvider({ children }) {
           booking_id: bookingId,
           port_id: stationId,
           entry_type: "booking",
-          is_priority: true,
-          battery_level: Number(batteryPercentage),
+          is_priority: isPriority,
+          battery_level: isPriority ? batteryLevel : null,
+          preferred_time: preferredTime,
         }),
       });
 
@@ -243,28 +332,6 @@ export function AppDataProvider({ children }) {
       await loadDashboardData(currentUser);
     },
     [addNotification, currentUser, ensureDefaultVehicle, loadDashboardData, ports],
-  );
-
-  const notifyBooking = useCallback(
-    async (entryId) => {
-      const entry = queueEntries.find((item) => item.entry_id === entryId);
-      if (!entry) {
-        throw new Error("Queue entry not found.");
-      }
-
-      await apiRequest("/notifications/", {
-        method: "POST",
-        body: JSON.stringify({
-          user_id: entry.user_id,
-          type: "queue_update",
-          message: "Your charging slot is almost ready.",
-          sent_via: "in_app",
-        }),
-      });
-
-      addNotification("Driver notification sent.", "info");
-    },
-    [addNotification, queueEntries],
   );
 
   const startCharging = useCallback(
@@ -331,6 +398,123 @@ export function AppDataProvider({ children }) {
     [addNotification, currentUser, loadDashboardData, queueEntries],
   );
 
+  const cancelUserBooking = useCallback(
+    async (bookingId) => {
+      await apiRequest(`/bookings/${bookingId}/cancel`, {
+        method: "PUT",
+        body: JSON.stringify({ cancelled_by: "driver" }),
+      });
+      addNotification("Booking cancelled.", "warning");
+      await loadDashboardData(currentUser);
+    },
+    [addNotification, currentUser, loadDashboardData],
+  );
+
+  const delayQueueEntry = useCallback(
+    async (entryId) => {
+      await apiRequest(`/queue/${entryId}/delay`, { method: "PUT" });
+      addNotification("Queue position delayed by one slot.", "info");
+      await loadDashboardData(currentUser);
+    },
+    [addNotification, currentUser, loadDashboardData],
+  );
+
+  const markQueueNoShow = useCallback(
+    async (entryId) => {
+      await apiRequest(`/queue/${entryId}/noshow`, { method: "PUT" });
+      addNotification("Queue entry removed.", "warning");
+      await loadDashboardData(currentUser);
+    },
+    [addNotification, currentUser, loadDashboardData],
+  );
+
+  const addVehicle = useCallback(
+    async ({ vehicleModel, numberPlate, connectorType }) => {
+      if (!currentUser?.uid) {
+        throw new Error("Please log in first.");
+      }
+
+      await apiRequest(`/auth/user/${currentUser.uid}/vehicles`, {
+        method: "POST",
+        body: JSON.stringify({
+          vehicle_model: vehicleModel,
+          number_plate: numberPlate,
+          connector_type: connectorType,
+        }),
+      });
+      addNotification("Vehicle added.", "success");
+      await loadDashboardData(currentUser);
+    },
+    [addNotification, currentUser, loadDashboardData],
+  );
+
+  const setDefaultVehicle = useCallback(
+    async (vehicleId) => {
+      if (!currentUser?.uid) {
+        throw new Error("Please log in first.");
+      }
+
+      await apiRequest(`/auth/user/${currentUser.uid}/vehicles/${vehicleId}/default`, {
+        method: "PUT",
+      });
+      addNotification("Default vehicle updated.", "success");
+      await loadDashboardData(currentUser);
+    },
+    [addNotification, currentUser, loadDashboardData],
+  );
+
+  const deleteVehicle = useCallback(
+    async (vehicleId) => {
+      if (!currentUser?.uid) {
+        throw new Error("Please log in first.");
+      }
+
+      await apiRequest(`/auth/user/${currentUser.uid}/vehicles/${vehicleId}`, {
+        method: "DELETE",
+      });
+      addNotification("Vehicle deleted.", "warning");
+      await loadDashboardData(currentUser);
+    },
+    [addNotification, currentUser, loadDashboardData],
+  );
+
+  const updatePortStatus = useCallback(
+    async (portId, status) => {
+      await apiRequest(`/ports/${portId}/status`, {
+        method: "PUT",
+        body: JSON.stringify({ status }),
+      });
+      addNotification(`Port status changed to ${status}.`, "info");
+      await loadDashboardData(currentUser);
+    },
+    [addNotification, currentUser, loadDashboardData],
+  );
+
+  const issueViolation = useCallback(
+    async ({ userId, reason, issuedBy = "operator" }) => {
+      await apiRequest("/violations/", {
+        method: "POST",
+        body: JSON.stringify({
+          user_id: userId,
+          reason,
+          issued_by: issuedBy,
+        }),
+      });
+      addNotification("Violation issued.", "warning");
+      await loadDashboardData(currentUser);
+    },
+    [addNotification, currentUser, loadDashboardData],
+  );
+
+  const liftViolation = useCallback(
+    async (violationId) => {
+      await apiRequest(`/violations/${violationId}`, { method: "DELETE" });
+      addNotification("Violation lifted.", "success");
+      await loadDashboardData(currentUser);
+    },
+    [addNotification, currentUser, loadDashboardData],
+  );
+
   const value = useMemo(() => {
     const stations = ports.map((port, index) => ({
       id: port.port_id,
@@ -346,6 +530,41 @@ export function AppDataProvider({ children }) {
       acc[port.port_id] = port.port_name || `Charging Port ${index + 1}`;
       return acc;
     }, {});
+
+    const myQueueEntry = queueEntries.find((item) => item.user_id === currentUser?.uid) || null;
+
+    const queueDisplay = queueEntries
+      .slice()
+      .sort((a, b) => Number(a.queue_position || 999) - Number(b.queue_position || 999))
+      .map((item) => ({
+        ...item,
+        user_name: userNamesById[item.user_id] || item.user_id,
+        vehicle_model: item.vehicle_model || item.vehicle_id,
+        port_name: portNameById[item.port_id] || item.port_id,
+      }));
+
+    const sessionsDisplay = allSessions
+      .filter((item) => item.status === "active")
+      .map((item) => ({
+        ...item,
+        user_name: userNamesById[item.user_id] || item.user_id,
+        vehicle_model: item.vehicle_model || item.vehicle_id,
+        port_name: portNameById[item.port_id] || item.port_id,
+        start_time: formatTimeLabel(item.start_time),
+      }));
+
+    const bookingsDisplay = userBookings.map((item) => ({
+      ...item,
+      created_at: formatDateLabel(item.created_at),
+    }));
+
+    const violationsDisplay = violations
+      .slice()
+      .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))
+      .map((item) => ({
+        ...item,
+        user_name: userNamesById[item.user_id] || item.user_id,
+      }));
 
     const queueBookings = queueEntries
       .filter((item) => item.status === "waiting" || item.status === "called")
@@ -452,17 +671,34 @@ export function AppDataProvider({ children }) {
     return {
       currentUser,
       currentDriver: currentUser?.name || "Driver",
+      currentRole: currentUser?.role || "driver",
       stations,
+      ports,
+      vehicles,
       bookings: userBookings,
+      bookingsDisplay,
+      queueEntries,
+      queueDisplay,
+      myQueueEntry,
+      sessionsDisplay,
+      violations: violationsDisplay,
       queueBookings,
       activeSessions,
       completedSessions,
       stationsWithAvailability,
       totalAvailablePorts,
-      notifications,
+      appAlerts: alerts,
       dismissNotification,
       createBooking,
-      notifyBooking,
+      cancelUserBooking,
+      delayQueueEntry,
+      markQueueNoShow,
+      addVehicle,
+      setDefaultVehicle,
+      deleteVehicle,
+      updatePortStatus,
+      issueViolation,
+      liftViolation,
       startCharging,
       completeSession,
       cancelBooking,
@@ -476,18 +712,28 @@ export function AppDataProvider({ children }) {
     };
   }, [
     cancelBooking,
+    cancelUserBooking,
     completeSession,
     createBooking,
     currentUser,
+    delayQueueEntry,
     dismissNotification,
+    issueViolation,
+    liftViolation,
+    markQueueNoShow,
     loadDashboardData,
     loginUser,
-    notifications,
-    notifyBooking,
+    vehicles,
+    alerts,
     ports,
     queueEntries,
+    violations,
     registerUser,
+    addVehicle,
+    setDefaultVehicle,
+    deleteVehicle,
     startCharging,
+    updatePortStatus,
     allSessions,
     userBookings,
     userNamesById,

@@ -36,6 +36,11 @@ function Register() {
       return;
     }
 
+    if (!formData.vehicleModel.trim() || !formData.numberPlate.trim()) {
+      setError("Vehicle model and number plate are required.");
+      return;
+    }
+
     if (formData.password.length < 8) {
       setError("Password must be at least 8 characters long.");
       return;
@@ -137,6 +142,7 @@ function Register() {
             value={formData.vehicleModel}
             onChange={updateField}
             placeholder="Nissan Leaf"
+            required
           />
 
           <label htmlFor="register-number-plate">Number Plate</label>
@@ -147,6 +153,7 @@ function Register() {
             value={formData.numberPlate}
             onChange={updateField}
             placeholder="KDA 123A"
+            required
           />
 
           <label htmlFor="register-connector-type">Connector Type</label>

@@ -13,8 +13,6 @@ function Dashboard() {
     driverStats,
     driverRecentSessions,
     nearbyStations,
-    notifications,
-    dismissNotification,
   } = useAppData();
 
   const [showBookingForm, setShowBookingForm] = useState(false);
@@ -196,19 +194,6 @@ function Dashboard() {
           <strong>{driverStats.savedCo2}</strong>
         </article>
       </section>
-
-      {notifications.length > 0 ? (
-        <section className="notif-list" aria-label="Driver notifications">
-          {notifications.map((notice) => (
-            <article key={notice.id} className={`notif-item notif-${notice.type}`}>
-              <p>{notice.message}</p>
-              <button type="button" onClick={() => dismissNotification(notice.id)}>
-                Dismiss
-              </button>
-            </article>
-          ))}
-        </section>
-      ) : null}
 
       <section className="dashboard-content">
         <article className="panel">

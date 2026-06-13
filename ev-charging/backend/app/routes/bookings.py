@@ -7,7 +7,7 @@ bookings_bp = Blueprint("bookings", __name__)
 def add_booking():
     data = request.get_json()
 
-    required_fields = ["user_id", "vehicle_id", "port_id"]
+    required_fields = ["user_id", "vehicle_id", "port_id", "preferred_time"]
     for field in required_fields:
         if field not in data:
             return jsonify({"error": f"{field} is required"}), 400

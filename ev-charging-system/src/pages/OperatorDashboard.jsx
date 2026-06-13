@@ -11,12 +11,9 @@ function OperatorDashboard() {
     activeSessions,
     completedSessions,
     totalAvailablePorts,
-    notifyBooking,
     startCharging,
     completeSession,
     cancelBooking,
-    notifications,
-    dismissNotification,
   } = useAppData();
 
   const waitingVehicles = queueBookings.length;
@@ -63,19 +60,6 @@ function OperatorDashboard() {
           <strong>{totalAvailablePorts}</strong>
         </article>
       </section>
-
-      {notifications.length > 0 ? (
-        <section className="operator-notif-list" aria-label="Operator notifications">
-          {notifications.map((notice) => (
-            <article key={notice.id} className={`notif-item notif-${notice.type}`}>
-              <p>{notice.message}</p>
-              <button type="button" onClick={() => dismissNotification(notice.id)}>
-                Dismiss
-              </button>
-            </article>
-          ))}
-        </section>
-      ) : null}
 
       {actionError ? (
         <section className="operator-notif-list" aria-label="Operator action errors">
@@ -143,9 +127,6 @@ function OperatorDashboard() {
                     </td>
                     <td>
                       <div className="queue-actions">
-                        <button type="button" className="mini-btn" onClick={() => runAction(() => notifyBooking(item.id))}>
-                          Notify
-                        </button>
                         <button
                           type="button"
                           className="mini-btn mini-btn-start"
