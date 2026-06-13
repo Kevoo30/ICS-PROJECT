@@ -4,17 +4,17 @@
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(circle at 10% 15%, #daf5ef 0%, transparent 35%),
-    radial-gradient(circle at 85% 5%, #ffe1d4 0%, transparent 30%),
-    linear-gradient(145deg, #f4f9fc 0%, #edf5f4 100%);
+    radial-gradient(circle at 10% 15%, #00d4aa22 0%, transparent 35%),
+    radial-gradient(circle at 85% 5%, #4d8eff22 0%, transparent 30%),
+    linear-gradient(145deg, #131621 0%, #0f1117 100%);
 }
 
 .register-card {
   width: min(100%, 480px);
-  background: #ffffff;
-  border: 1px solid #d3dee3;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 16px;
-  box-shadow: 0 20px 45px rgba(12, 46, 58, 0.12);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);
   padding: 28px;
   text-align: left;
 }
@@ -29,19 +29,19 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #0c7a6b;
+  color: var(--teal);
 }
 
 .register-header h1 {
   margin: 6px 0 8px;
   font-size: 30px;
-  color: #15323d;
+  color: var(--text-primary);
 }
 
 .register-subtitle {
   margin: 0;
   font-size: 14px;
-  color: #4e6670;
+  color: var(--text-secondary);
 }
 
 .register-form {
@@ -52,7 +52,7 @@
 .register-form label {
   font-size: 13px;
   font-weight: 600;
-  color: #234651;
+  color: var(--text-secondary);
 }
 
 .register-form input[type="text"],
@@ -61,12 +61,12 @@
 .register-form input[type="password"],
 .register-form select {
   height: 44px;
-  border: 1px solid #c5d4da;
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0 12px;
   font-size: 14px;
-  color: #18363f;
-  background: #fbfdfd;
+  color: var(--text-primary);
+  background: var(--bg-base);
 }
 
 .register-form input[type="text"]:focus,
@@ -74,14 +74,14 @@
 .register-form input[type="tel"]:focus,
 .register-form input[type="password"]:focus,
 .register-form select:focus {
-  outline: 2px solid #9edfd7;
-  border-color: #3a9b8e;
+  outline: 2px solid #00d4aa55;
+  border-color: var(--teal);
 }
 
 .register-error {
   margin: 4px 0;
   font-size: 13px;
-  color: #ae2135;
+  color: var(--red);
 }
 
 .register-terms {
@@ -90,7 +90,7 @@
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #3f5962;
+  color: var(--text-secondary);
 }
 
 .register-terms input {
@@ -103,8 +103,8 @@
   height: 44px;
   border: 0;
   border-radius: 10px;
-  background: linear-gradient(135deg, #1a9f8f 0%, #12786b 100%);
-  color: #ffffff;
+  background: var(--teal);
+  color: #06130f;
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
@@ -122,12 +122,12 @@
 .register-footer {
   margin: 16px 0 0;
   font-size: 14px;
-  color: #4a626b;
+  color: var(--text-secondary);
   text-align: center;
 }
 
 .register-footer a {
-  color: #177e70;
+  color: var(--teal);
   font-weight: 700;
   text-decoration: none;
 }

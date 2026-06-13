@@ -4,17 +4,17 @@
   place-items: center;
   padding: 24px;
   background:
-    radial-gradient(circle at 20% 20%, #d5f3ff 0%, transparent 35%),
-    radial-gradient(circle at 80% 10%, #ffe1be 0%, transparent 30%),
-    linear-gradient(135deg, #f7f9fc 0%, #eef3ff 100%);
+    radial-gradient(circle at 20% 20%, #00d4aa22 0%, transparent 35%),
+    radial-gradient(circle at 80% 10%, #4d8eff22 0%, transparent 30%),
+    linear-gradient(135deg, #131621 0%, #0f1117 100%);
 }
 
 .login-card {
   width: min(100%, 420px);
-  background: #ffffff;
-  border: 1px solid #d7dfeb;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
   border-radius: 16px;
-  box-shadow: 0 20px 45px rgba(24, 44, 80, 0.16);
+  box-shadow: 0 20px 45px rgba(0, 0, 0, 0.25);
   padding: 28px;
   text-align: left;
 }
@@ -29,19 +29,19 @@
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #1f66cc;
+  color: var(--teal);
 }
 
 .login-header h1 {
   margin: 6px 0 8px;
   font-size: 30px;
-  color: #0f1f3d;
+  color: var(--text-primary);
 }
 
 .login-subtitle {
   margin: 0;
   font-size: 14px;
-  color: #4f5f7a;
+  color: var(--text-secondary);
 }
 
 .login-form {
@@ -52,9 +52,9 @@
 .auth-notice {
   margin: 0 0 12px;
   font-size: 13px;
-  color: #1c6a3d;
-  background: #edf8f1;
-  border: 1px solid #b9dfc7;
+  color: var(--teal);
+  background: var(--teal-dim);
+  border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px 10px;
 }
@@ -62,30 +62,30 @@
 .auth-error {
   margin: 2px 0 0;
   font-size: 13px;
-  color: #ab2134;
+  color: var(--red);
 }
 
 .login-form label {
   font-size: 13px;
   font-weight: 600;
-  color: #1a2f55;
+  color: var(--text-secondary);
 }
 
 .login-form input[type="email"],
 .login-form input[type="password"] {
   height: 44px;
-  border: 1px solid #c7d2e5;
+  border: 1px solid var(--border);
   border-radius: 10px;
   padding: 0 12px;
   font-size: 14px;
-  color: #122748;
-  background: #fbfdff;
+  color: var(--text-primary);
+  background: var(--bg-base);
 }
 
 .login-form input[type="email"]:focus,
 .login-form input[type="password"]:focus {
-  outline: 2px solid #9ec3ff;
-  border-color: #4c86e8;
+  outline: 2px solid #00d4aa55;
+  border-color: var(--teal);
 }
 
 .login-options {
@@ -100,7 +100,7 @@
   align-items: center;
   gap: 8px;
   font-size: 13px;
-  color: #395174;
+  color: var(--text-secondary);
 }
 
 .remember-me input {
@@ -111,7 +111,7 @@
 .link-button {
   border: 0;
   background: transparent;
-  color: #245ec2;
+  color: var(--blue);
   font-size: 13px;
   cursor: pointer;
 }
@@ -125,8 +125,8 @@
   height: 44px;
   border: 0;
   border-radius: 10px;
-  background: linear-gradient(135deg, #1f66cc 0%, #1850a0 100%);
-  color: #ffffff;
+  background: var(--teal);
+  color: #06130f;
   font-size: 15px;
   font-weight: 700;
   cursor: pointer;
@@ -144,12 +144,12 @@
 .login-footer {
   margin: 16px 0 0;
   font-size: 14px;
-  color: #425a7f;
+  color: var(--text-secondary);
   text-align: center;
 }
 
 .login-footer a {
-  color: #1f66cc;
+  color: var(--teal);
   font-weight: 700;
   text-decoration: none;
 }

@@ -37,6 +37,7 @@ def create_booking(data):
             "user_id": data["user_id"],
             "vehicle_id": data["vehicle_id"],
             "port_id": data["port_id"],
+            "preferred_time": data.get("preferred_time", None),
             "assigned_slot_start": None,
             "assigned_slot_end": None,
             "status": "pending",
