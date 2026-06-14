@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import { Badge, Btn } from "../components/ui";
 import { useAppData } from "../context/AppDataContext";
 
@@ -13,6 +13,8 @@ export default function Bookings() {
   const { bookingsDisplay, vehicles, ports, createBooking, cancelUserBooking } = useAppData();
   const [actionError, setActionError] = useState("");
   const [showBookingForm, setShowBookingForm] = useState(false);
+  const [isSubmittingBooking, setIsSubmittingBooking] = useState(false);
+  const bookingSubmitLockRef = useRef(false);
   const [bookingForm, setBookingForm] = useState({
     vehicle_id: "",
     port_id: "",
@@ -32,31 +34,43 @@ export default function Bookings() {
   const handleCreateBooking = async (event) => {
     event.preventDefault();
 
-    if (!bookingForm.vehicle_id) {
-      throw new Error("Please select a vehicle name.");
+    if (bookingSubmitLockRef.current) {
+      return;
     }
 
-    if (!bookingForm.port_id) {
-      throw new Error("Please select a port.");
-    }
+    bookingSubmitLockRef.current = true;
+    setIsSubmittingBooking(true);
 
-    if (!bookingForm.preferred_time) {
-      throw new Error("Please select your preferred charging time.");
-    }
+    try {
+      if (!bookingForm.vehicle_id) {
+        throw new Error("Please select a vehicle name.");
+      }
 
-    const battery = Number(bookingForm.battery_level);
-    if (Number.isNaN(battery) || battery < 1 || battery > 100) {
-      throw new Error("Battery level must be between 1 and 100.");
-    }
+      if (!bookingForm.port_id) {
+        throw new Error("Please select a port.");
+      }
 
-    await createBooking({
-      vehicle_id: bookingForm.vehicle_id,
-      port_id: bookingForm.port_id,
-      battery_level: battery,
-      preferred_time: bookingForm.preferred_time,
-    });
-    setShowBookingForm(false);
-    setBookingForm({ vehicle_id: "", port_id: "", battery_level: "20", preferred_time: "" });
+      if (!bookingForm.preferred_time) {
+        throw new Error("Please select your preferred charging time.");
+      }
+
+      const battery = Number(bookingForm.battery_level);
+      if (Number.isNaN(battery) || battery < 1 || battery > 100) {
+        throw new Error("Battery level must be between 1 and 100.");
+      }
+
+      await createBooking({
+        vehicle_id: bookingForm.vehicle_id,
+        port_id: bookingForm.port_id,
+        battery_level: battery,
+        preferred_time: bookingForm.preferred_time,
+      });
+      setShowBookingForm(false);
+      setBookingForm({ vehicle_id: "", port_id: "", battery_level: "20", preferred_time: "" });
+    } finally {
+      bookingSubmitLockRef.current = false;
+      setIsSubmittingBooking(false);
+    }
   };
 
   const availablePorts = ports.filter((item) => item.status !== "offline");
@@ -88,6 +102,7 @@ export default function Bookings() {
                   onChange={(event) =>
                     setBookingForm((current) => ({ ...current, vehicle_id: event.target.value }))
                   }
+                  disabled={isSubmittingBooking}
                   style={{
                     width: "100%",
                     padding: "8px",
@@ -114,6 +129,7 @@ export default function Bookings() {
                   onChange={(event) =>
                     setBookingForm((current) => ({ ...current, port_id: event.target.value }))
                   }
+                  disabled={isSubmittingBooking}
                   style={{
                     width: "100%",
                     padding: "8px",
@@ -141,6 +157,7 @@ export default function Bookings() {
                   onChange={(event) =>
                     setBookingForm((current) => ({ ...current, preferred_time: event.target.value }))
                   }
+                  disabled={isSubmittingBooking}
                   style={{
                     width: "100%",
                     padding: "8px",
@@ -163,6 +180,7 @@ export default function Bookings() {
                   onChange={(event) =>
                     setBookingForm((current) => ({ ...current, battery_level: event.target.value }))
                   }
+                  disabled={isSubmittingBooking}
                   placeholder="battery_level"
                   style={{
                     width: "100%",
@@ -178,7 +196,9 @@ export default function Bookings() {
             </div>
 
             <div style={{ marginTop: 10 }}>
-              <Btn type="submit" variant="primary">Save booking</Btn>
+              <Btn type="submit" variant="primary" disabled={isSubmittingBooking}>
+                {isSubmittingBooking ? "Saving booking..." : "Save booking"}
+              </Btn>
             </div>
           </form>
         </div>

@@ -31,6 +31,24 @@ def join_queue(data):
         if vehicle.to_dict()["connector_type"] != port.to_dict()["connector_type"]:
             return {"error": "Vehicle connector type does not match port"}, 400
 
+        booking_id = data.get("booking_id")
+        if booking_id:
+            active_entries = fs.collection("queue_entries")\
+                .where("booking_id", "==", booking_id)\
+                .where("is_deleted", "==", False)\
+                .get()
+
+            for entry in active_entries:
+                entry_data = entry.to_dict()
+                if entry_data.get("status") in ["waiting", "called", "charging"]:
+                    return {
+                        "message": "Booking is already in queue",
+                        "entry_id": entry_data.get("entry_id", entry.id),
+                        "queue_position": entry_data.get("queue_position"),
+                        "estimated_wait": entry_data.get("estimated_wait"),
+                        "deduplicated": True,
+                    }, 200
+
         # Get current queue length for this port
         existing_entries = fs.collection("queue_entries")\
             .where("port_id", "==", data["port_id"])\
