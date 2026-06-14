@@ -30,6 +30,27 @@ def create_booking(data):
         if vehicle.to_dict()["connector_type"] != port.to_dict()["connector_type"]:
             return {"error": "Vehicle connector type does not match port"}, 400
 
+        # Guard against duplicate active bookings caused by repeated submits.
+        existing_bookings = db.collection("bookings").where("user_id", "==", data["user_id"]).get()
+        for booking in existing_bookings:
+            booking_data = booking.to_dict()
+            if booking_data.get("is_deleted"):
+                continue
+            if booking_data.get("status") not in ["pending", "confirmed"]:
+                continue
+            if booking_data.get("vehicle_id") != data["vehicle_id"]:
+                continue
+            if booking_data.get("port_id") != data["port_id"]:
+                continue
+            if booking_data.get("preferred_time") != data.get("preferred_time", None):
+                continue
+
+            return {
+                "message": "Duplicate booking request detected. Reusing existing booking.",
+                "booking_id": booking_data.get("booking_id", booking.id),
+                "deduplicated": True,
+            }, 200
+
         # Create booking
         booking_ref = db.collection("bookings").document()
         booking_doc = {
