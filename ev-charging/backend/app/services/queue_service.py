@@ -1,5 +1,5 @@
-from firebase_admin import firestore, db as rtdb #type: ignore
-from datetime import datetime, timedelta
+from firebase_admin import firestore, db as rtdb
+from datetime import datetime, timedelta, timezone
 from config import Config
 
 fs = firestore.client()
@@ -75,10 +75,10 @@ def join_queue(data):
             "status": "waiting",
             "is_delayed": False,
             "no_show_deadline": None,
-            "arrived_at": datetime.utcnow(),
+            "arrived_at": datetime.now(timezone.utc),
             "called_at": None,
             "is_deleted": False,
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.now(timezone.utc)
         }
 
         entry_ref.set(entry_doc)
@@ -135,11 +135,11 @@ def delay_queue_entry(entry_id):
         batch.update(entry.reference, {
             "queue_position": current_position + 1,
             "is_delayed": True,
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.now(timezone.utc)
         })
         batch.update(next_entry.reference, {
             "queue_position": current_position,
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.now(timezone.utc)
         })
         batch.commit()
 
@@ -162,25 +162,30 @@ def mark_no_show(entry_id):
         user_id = entry_data["user_id"]
         port_id = entry_data["port_id"]
 
-        # Mark as no show
+        # Mark entry as no show
         fs.collection("queue_entries").document(entry_id).update({
             "status": "no_show",
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.now(timezone.utc)
         })
 
-        # Add violation
+        # Create violation automatically
         violation_ref = fs.collection("violations").document()
         violation_ref.set({
             "violation_id": violation_ref.id,
             "user_id": user_id,
             "reason": "No show at charging port",
             "issued_by": "system",
+            "no_show_reason": None,
+            "reason_submitted_at": None,
+            "status": "pending",
+            "reviewed_by": None,
+            "reviewed_at": None,
             "is_deleted": False,
-            "created_at": datetime.utcnow(),
-            "updated_at": datetime.utcnow()
+            "created_at": datetime.now(timezone.utc),
+            "updated_at": datetime.now(timezone.utc)
         })
 
-        # Check violation count and ban if necessary
+        # Count active violations and ban if limit reached
         violations = fs.collection("violations")\
             .where("user_id", "==", user_id)\
             .where("is_deleted", "==", False)\
@@ -189,13 +194,35 @@ def mark_no_show(entry_id):
         if len(violations) >= Config.VIOLATION_LIMIT:
             fs.collection("users").document(user_id).update({
                 "is_banned": True,
-                "updated_at": datetime.utcnow()
+                "updated_at": datetime.now(timezone.utc)
             })
 
-        # Recalculate queue positions
+        # Recalculate queue
         recalculate_queue(port_id)
 
-        return {"message": "No show recorded"}, 200
+        return {"message": "No show recorded and violation issued"}, 200
+
+    except Exception as e:
+        return {"error": str(e)}, 400
+
+
+def check_no_show_deadlines():
+    try:
+        now = datetime.now(timezone.utc)
+
+        expired_entries = fs.collection("queue_entries")\
+            .where("status", "==", "waiting")\
+            .where("is_deleted", "==", False)\
+            .get()
+
+        for entry in expired_entries:
+            entry_data = entry.to_dict()
+            deadline = entry_data.get("no_show_deadline")
+
+            if deadline and now > deadline:
+                mark_no_show(entry_data["entry_id"])
+
+        return {"message": "No show check complete"}, 200
 
     except Exception as e:
         return {"error": str(e)}, 400
@@ -214,7 +241,7 @@ def recalculate_queue(port_id):
         batch.update(entry.reference, {
             "queue_position": i + 1,
             "estimated_wait": (i + 1) * 30,
-            "updated_at": datetime.utcnow()
+            "updated_at": datetime.now(timezone.utc)
         })
     batch.commit()
     update_realtime_queue(port_id)
@@ -230,7 +257,7 @@ def update_realtime_queue(port_id):
 
     queue_data = {
         "queue_length": len(entries),
-        "updated_at": datetime.utcnow().isoformat(),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
         "entries": {
             e.to_dict()["entry_id"]: {
                 "position": e.to_dict()["queue_position"],
