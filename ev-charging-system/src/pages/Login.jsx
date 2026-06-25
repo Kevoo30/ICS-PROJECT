@@ -1,109 +1,52 @@
-import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import "../styles/login.css";
+﻿import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
 import { useAppData } from "../context/AppDataContext";
 
-function Login() {
+export default function Login() {
+  const { login } = useAppData();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { loginUser } = useAppData();
-  const [email, setEmail] = useState(location.state?.email ?? "");
-  const [password, setPassword] = useState("");
+  const [form, setForm] = useState({ email: "", password: "" });
   const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const registeredNotice = location.state?.registered
-    ? "Registration successful. Please sign in to continue."
-    : "";
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    if (!email.trim() || !password.trim()) {
-      setError("Email and password are required.");
-      return;
-    }
-
-    setError("");
-    setIsSubmitting(true);
-
-    try {
-      await loginUser(email, password);
-      navigate("/dashboard");
-    } catch (submitError) {
-      setError(submitError.message || "Unable to sign in.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  async function handleSubmit(e) {
+    e.preventDefault();
+    const result = await login(form.email, form.password);
+    if (!result.ok) return setError(result.error);
+    navigate(result.user.role === "operator" ? "/operator/dashboard" : "/dashboard");
+  }
 
   return (
-    <main className="login-shell">
-      <section className="login-card" aria-labelledby="login-title">
-        <div className="login-header">
-          <p className="login-kicker">EV Charging System</p>
-          <h1 id="login-title">User Login</h1>
-          <p className="login-subtitle">Sign in to access your charging dashboard.</p>
-        </div>
+    <div className="auth-wrapper">
+      <div className="auth-box">
+        <div style={{ textAlign: "center", fontSize: "2.5rem", marginBottom: "12px" }}>⚡</div>
+        <h1 className="auth-title" style={{ textAlign: "center" }}>EV Charge</h1>
+        <p className="auth-subtitle" style={{ textAlign: "center" }}>Sign in to your account</p>
 
-        {registeredNotice ? (
-          <p className="auth-notice" role="status" aria-live="polite">
-            {registeredNotice}
-          </p>
-        ) : null}
+        {error && <div className="alert alert-danger">{error}</div>}
 
-        <form className="login-form" onSubmit={handleSubmit}>
-          <label htmlFor="user-email">Email</label>
-          <input
-            id="user-email"
-            type="email"
-            name="email"
-            placeholder="you@example.com"
-            autoComplete="email"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            required
-          />
-
-          <label htmlFor="user-password">Password</label>
-          <input
-            id="user-password"
-            type="password"
-            name="password"
-            placeholder="Enter password"
-            autoComplete="current-password"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            required
-          />
-
-          {error ? (
-            <p className="auth-error" role="alert">
-              {error}
-            </p>
-          ) : null}
-
-          <div className="login-options">
-            <label className="remember-me" htmlFor="remember">
-              <input id="remember" type="checkbox" name="remember" />
-              Remember me
-            </label>
-            <button type="button" className="link-button">
-              Forgot password?
-            </button>
+        <form onSubmit={handleSubmit}>
+          <div className="form-group">
+            <label className="form-label">Email</label>
+            <input className="form-input" type="email" required value={form.email}
+              onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
           </div>
-
-          <button type="submit" className="login-btn" disabled={isSubmitting}>
-            {isSubmitting ? "Signing In..." : "Sign In"}
+          <div className="form-group">
+            <label className="form-label">Password</label>
+            <input className="form-input" type="password" required value={form.password}
+              onChange={e => setForm(p => ({ ...p, password: e.target.value }))} />
+          </div>
+          <button className="btn btn-primary" style={{ width: "100%", padding: "11px" }} type="submit">
+            Sign In
           </button>
         </form>
 
-        <p className="login-footer">
-          New user? <Link to="/register">Create an account</Link>
+        <p style={{ textAlign: "center", marginTop: "20px", fontSize: ".88rem", color: "var(--text-secondary)" }}>
+          No account? <Link className="auth-link" to="/register">Register here</Link>
         </p>
-      </section>
-    </main>
+        <p style={{ textAlign: "center", marginTop: "10px", fontSize: ".8rem", color: "var(--text-secondary)" }}>
+          Demo operator: admin@ev.com / admin123
+        </p>
+      </div>
+    </div>
   );
 }
-
-export default Login;

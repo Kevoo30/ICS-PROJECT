@@ -1,62 +1,73 @@
-import { useEffect, useState } from "react";
-import { Routes, Route, Navigate } from "react-router-dom";
-
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AppDataProvider, useAppData } from "./context/AppDataContext";
+import { ThemeProvider } from "./context/ThemeContext";
 import Layout from "./components/Layout";
+import ProtectedRoute from "./components/ProtectedRoute";
+
+// Auth pages
 import Login from "./pages/Login";
 import Register from "./pages/Register";
-import DriverDashboard from "./pages/DriverDashboard";
-import Queue from "./pages/Queue";
-import Bookings from "./pages/Bookings";
-import Vehicles from "./pages/Vehicles";
-import OpOverview from "./pages/operator/OpOverview";
-import OpPorts from "./pages/operator/OpPorts";
+
+// Driver pages
+import DriverDashboard from "./pages/driver/DriverDashboard";
+import Queue from "./pages/driver/Queue";
+import Vehicles from "./pages/driver/Vehicles";
+import History from "./pages/driver/History";
+
+// Operator pages
+import OperatorDashboard from "./pages/operator/OperatorDashboard";
 import OpQueue from "./pages/operator/OpQueue";
+import OpStations from "./pages/operator/OpStations";
 import OpViolations from "./pages/operator/OpViolations";
-import { useAppData } from "./context/AppDataContext";
+import OpDrivers from "./pages/operator/OpDrivers";
+
 import "./styles/global.css";
 
-function AppShell() {
-  const { currentRole, currentUser } = useAppData();
-  const [role, setRole] = useState("driver");
+function AppRoutes() {
+  const { currentUser } = useAppData();
 
-  if (!currentUser?.uid) {
-    return <Navigate to="/login" replace />;
-  }
-
-  useEffect(() => {
-    if (currentRole === "driver" || currentRole === "operator") {
-      setRole(currentRole);
-    }
-  }, [currentRole]);
-
-  return (
-    <Layout currentRole={role} onRoleChange={setRole}>
-      <Routes>
-        <Route path="/dashboard" element={<DriverDashboard />} />
-        <Route path="/queue" element={<Queue />} />
-        <Route path="/bookings" element={<Bookings />} />
-        <Route path="/vehicles" element={<Vehicles />} />
-
-        <Route path="/operator/overview" element={<OpOverview />} />
-        <Route path="/operator/ports" element={<OpPorts />} />
-        <Route path="/operator/queue" element={<OpQueue />} />
-        <Route path="/operator/violations" element={<OpViolations />} />
-
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
-    </Layout>
-  );
-}
-
-function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/login" replace />} />
-      <Route path="/login" element={<Login />} />
-      <Route path="/register" element={<Register />} />
-      <Route path="/*" element={<AppShell />} />
+      {/* Public */}
+      <Route path="/login" element={currentUser ? <Navigate to={currentUser.role === "operator" ? "/operator/dashboard" : "/dashboard"} replace /> : <Login />} />
+      <Route
+        path="/register"
+        element={
+          currentUser ? (
+            <Navigate to={currentUser.role === "operator" ? "/operator/dashboard" : "/dashboard"} replace />
+          ) : (
+            <Register />
+          )
+        }
+      />
+
+      {/* Driver routes */}
+      <Route path="/dashboard" element={<ProtectedRoute role="driver"><Layout><DriverDashboard /></Layout></ProtectedRoute>} />
+      <Route path="/queue" element={<ProtectedRoute role="driver"><Layout><Queue /></Layout></ProtectedRoute>} />
+      <Route path="/vehicles" element={<ProtectedRoute role="driver"><Layout><Vehicles /></Layout></ProtectedRoute>} />
+      <Route path="/history" element={<ProtectedRoute role="driver"><Layout><History /></Layout></ProtectedRoute>} />
+
+      {/* Operator routes */}
+      <Route path="/operator/dashboard" element={<ProtectedRoute role="operator"><Layout><OperatorDashboard /></Layout></ProtectedRoute>} />
+      <Route path="/operator/queue" element={<ProtectedRoute role="operator"><Layout><OpQueue /></Layout></ProtectedRoute>} />
+      <Route path="/operator/stations" element={<ProtectedRoute role="operator"><Layout><OpStations /></Layout></ProtectedRoute>} />
+      <Route path="/operator/violations" element={<ProtectedRoute role="operator"><Layout><OpViolations /></Layout></ProtectedRoute>} />
+      <Route path="/operator/drivers" element={<ProtectedRoute role="operator"><Layout><OpDrivers /></Layout></ProtectedRoute>} />
+
+      {/* Fallback */}
+      <Route path="*" element={<Navigate to={currentUser ? (currentUser.role === "operator" ? "/operator/dashboard" : "/dashboard") : "/login"} replace />} />
     </Routes>
   );
 }
 
-export default App;
+export default function App() {
+  return (
+    <BrowserRouter>
+      <ThemeProvider>
+        <AppDataProvider>
+          <AppRoutes />
+        </AppDataProvider>
+      </ThemeProvider>
+    </BrowserRouter>
+  );
+}

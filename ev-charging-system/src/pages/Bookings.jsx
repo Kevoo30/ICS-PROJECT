@@ -1,4 +1,4 @@
-import React, { useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Badge, Btn } from "../components/ui";
 import { useAppData } from "../context/AppDataContext";
 
@@ -74,6 +74,36 @@ export default function Bookings() {
   };
 
   const availablePorts = ports.filter((item) => item.status !== "offline");
+  const selectedVehicle = useMemo(
+    () => vehicles.find((vehicle) => vehicle.vehicle_id === bookingForm.vehicle_id) || null,
+    [bookingForm.vehicle_id, vehicles],
+  );
+  const selectedConnectorType = selectedVehicle?.connector_type || "";
+  const compatiblePorts = useMemo(() => {
+    if (!selectedConnectorType) {
+      return availablePorts;
+    }
+    const exactMatches = availablePorts.filter(
+      (port) => String(port.connector_type || "").toLowerCase() === String(selectedConnectorType).toLowerCase(),
+    );
+    return exactMatches.length > 0 ? exactMatches : availablePorts;
+  }, [availablePorts, selectedConnectorType]);
+
+  useEffect(() => {
+    if (!bookingForm.vehicle_id) {
+      return;
+    }
+
+    if (!compatiblePorts.length) {
+      setBookingForm((current) => ({ ...current, port_id: "" }));
+      return;
+    }
+
+    const isSelectedPortCompatible = compatiblePorts.some((port) => port.port_id === bookingForm.port_id);
+    if (!isSelectedPortCompatible) {
+      setBookingForm((current) => ({ ...current, port_id: compatiblePorts[0].port_id }));
+    }
+  }, [bookingForm.port_id, bookingForm.vehicle_id, compatiblePorts]);
 
   return (
     <div className="page animate-in">
@@ -124,6 +154,11 @@ export default function Bookings() {
 
               <div>
                 <div className="text-muted" style={{ marginBottom: 4 }}>Port type</div>
+                {selectedConnectorType ? (
+                  <div className="text-muted" style={{ marginBottom: 4 }}>
+                    Auto-filled from vehicle connector: <strong>{selectedConnectorType}</strong>
+                  </div>
+                ) : null}
                 <select
                   value={bookingForm.port_id}
                   onChange={(event) =>
@@ -141,7 +176,7 @@ export default function Bookings() {
                   required
                 >
                   <option value="">Select port type</option>
-                  {availablePorts.map((port) => (
+                  {compatiblePorts.map((port) => (
                     <option key={port.port_id} value={port.port_id}>
                       {port.connector_type} ({port.port_name})
                     </option>

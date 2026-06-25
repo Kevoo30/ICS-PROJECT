@@ -3,4 +3,8 @@ from app import create_app
 app = create_app()
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(
+        host=app.config.get("FLASK_HOST", "127.0.0.1"),
+        port=app.config.get("FLASK_PORT", 5000),
+        debug=str(app.config.get("FLASK_DEBUG", "0")).lower() in {"1", "true", "yes", "on"},
+    )

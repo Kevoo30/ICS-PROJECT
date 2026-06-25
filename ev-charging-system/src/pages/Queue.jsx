@@ -3,10 +3,24 @@ import { Badge, Btn, Battery } from "../components/ui";
 import { useAppData } from "../context/AppDataContext";
 
 export default function Queue() {
-  const { myQueueEntry, queueDisplay, currentUser, delayQueueEntry, markQueueNoShow } = useAppData();
+  const { myQueueEntry, queueDisplay, currentUser, vehicles, delayQueueEntry, markQueueNoShow } = useAppData();
   const myEntry = myQueueEntry;
   const myQueueEntries = queueDisplay.filter((entry) => entry.user_id === currentUser?.uid);
   const [actionError, setActionError] = useState("");
+
+  const vehicleNameById = (vehicles || []).reduce((acc, vehicle) => {
+    acc[vehicle.vehicle_id] = vehicle.vehicle_model || vehicle.number_plate || vehicle.vehicle_id;
+    return acc;
+  }, {});
+
+  const getVehicleLabel = (entry) => {
+    return (
+      vehicleNameById[entry.vehicle_id] ||
+      entry.vehicle_model ||
+      entry.vehicle_id ||
+      "-"
+    );
+  };
 
   const runAction = async (action) => {
     setActionError("");
@@ -38,7 +52,7 @@ export default function Queue() {
                 <Badge status={myEntry.status} />
               </div>
               <div className="text-muted" style={{ marginBottom: 8 }}>
-                {myEntry.vehicle_model} · {myEntry.port_name} · Est. wait {myEntry.estimated_wait} min
+                {getVehicleLabel(myEntry)} · {myEntry.port_name} · Est. wait {myEntry.estimated_wait} min
               </div>
               {myEntry.battery_level != null ? <Battery level={myEntry.battery_level} /> : null}
             </div>
@@ -85,7 +99,7 @@ export default function Queue() {
               {myQueueEntries.map((entry) => (
                 <tr key={entry.entry_id}>
                   <td>{entry.queue_position}</td>
-                  <td>{entry.vehicle_model}</td>
+                  <td>{getVehicleLabel(entry)}</td>
                   <td>{entry.port_name}</td>
                   <td>{entry.battery_level != null ? `${entry.battery_level}%` : "-"}</td>
                   <td>{entry.entry_type.replace("_", " ")}</td>

@@ -1,5 +1,6 @@
+import os
 from flask import Flask
-from firebase_admin import credentials, firestore, db
+from firebase_admin import credentials, firestore
 import firebase_admin
 from config import Config
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -9,10 +10,20 @@ def create_app():
     app.config.from_object(Config)
 
     # Initialize Firebase Admin SDK
-    cred = credentials.Certificate(app.config["FIREBASE_CREDENTIALS"])
-    firebase_admin.initialize_app(cred, {
-        "databaseURL": "https://ev-charger-project-1e881-default-rtdb.europe-west1.firebasedatabase.app"
-    })
+    cred_path = app.config.get("FIREBASE_CREDENTIALS")
+    if not cred_path:
+        raise RuntimeError("FIREBASE_CREDENTIALS is not set. Add it to backend .env.")
+    if not os.path.exists(cred_path):
+        raise FileNotFoundError(f"Firebase credentials not found: {cred_path}")
+
+    cred = credentials.Certificate(cred_path)
+    if not firebase_admin._apps:
+        firebase_admin.initialize_app(
+            cred,
+            {
+                "databaseURL": app.config.get("FIREBASE_DATABASE_URL"),
+            },
+        )
 
     # Initialize Firestore
     app.db = firestore.client()

@@ -1,16 +1,18 @@
 import React, { useState } from "react";
-import { Badge, Btn } from "../components/ui";
 import { useAppData } from "../context/AppDataContext";
 
 export default function Vehicles() {
-  const { vehicles, addVehicle, setDefaultVehicle, deleteVehicle } = useAppData();
+  const { currentUser, addVehicle, removeVehicle } = useAppData();
   const [actionError, setActionError] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [newVehicle, setNewVehicle] = useState({
-    vehicleModel: "",
-    numberPlate: "",
-    connectorType: "Type 2",
+    make: "",
+    model: "",
+    plate: "",
+    batteryCapacity: "",
   });
+
+  const vehicles = currentUser?.vehicles || [];
 
   const runAction = async (action) => {
     setActionError("");
@@ -24,73 +26,78 @@ export default function Vehicles() {
   const handleAddVehicle = async (event) => {
     event.preventDefault();
 
-    if (!newVehicle.vehicleModel.trim() || !newVehicle.numberPlate.trim()) {
-      setActionError("Vehicle model and number plate are required.");
+    if (!newVehicle.make.trim() || !newVehicle.model.trim() || !newVehicle.plate.trim()) {
+      setActionError("Make, model and number plate are required.");
       return;
     }
 
-    await addVehicle({
-      vehicleModel: newVehicle.vehicleModel.trim(),
-      numberPlate: newVehicle.numberPlate.trim().toUpperCase(),
-      connectorType: newVehicle.connectorType,
+    await addVehicle(currentUser.id, {
+      make: newVehicle.make.trim(),
+      model: newVehicle.model.trim(),
+      plate: newVehicle.plate.trim().toUpperCase(),
+      batteryCapacity: newVehicle.batteryCapacity ? Number(newVehicle.batteryCapacity) : null,
     });
 
-    setNewVehicle({ vehicleModel: "", numberPlate: "", connectorType: "Type 2" });
+    setNewVehicle({ make: "", model: "", plate: "", batteryCapacity: "" });
     setShowAddForm(false);
   };
 
   return (
-    <div className="page animate-in">
-      <div className="flex justify-between items-center">
+    <div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <div>
-          <div style={{ fontSize: 16, fontWeight: 700 }}>{vehicles.length} vehicles</div>
-          <div className="text-muted">Connected to your account</div>
+          <div className="page-heading" style={{ marginBottom: 4 }}>My Vehicles</div>
+          <div style={{ color: "var(--text-secondary)", fontSize: ".9rem" }}>{vehicles.length} vehicle(s) linked</div>
         </div>
-        <Btn variant="primary" onClick={() => setShowAddForm((current) => !current)}>
+        <button className="btn btn-primary" onClick={() => setShowAddForm((current) => !current)}>
           {showAddForm ? "Close" : "+ Add vehicle"}
-        </Btn>
+        </button>
       </div>
 
       {showAddForm ? (
         <div className="card">
-          <div className="card-header">
-            <div className="card-title">Add vehicle</div>
-          </div>
+          <div className="card-title">Add vehicle</div>
           <form onSubmit={(event) => runAction(() => handleAddVehicle(event))}>
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <input
                 type="text"
-                placeholder="Vehicle model"
-                value={newVehicle.vehicleModel}
+                className="form-input"
+                placeholder="Make (e.g. Tesla)"
+                value={newVehicle.make}
                 onChange={(event) =>
-                  setNewVehicle((current) => ({ ...current, vehicleModel: event.target.value }))
+                  setNewVehicle((current) => ({ ...current, make: event.target.value }))
                 }
-                style={{ padding: "8px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-base)", color: "var(--text-primary)" }}
               />
               <input
                 type="text"
+                className="form-input"
+                placeholder="Model (e.g. Model 3)"
+                value={newVehicle.model}
+                onChange={(event) =>
+                  setNewVehicle((current) => ({ ...current, model: event.target.value }))
+                }
+              />
+              <input
+                type="text"
+                className="form-input"
                 placeholder="Number plate"
-                value={newVehicle.numberPlate}
+                value={newVehicle.plate}
                 onChange={(event) =>
-                  setNewVehicle((current) => ({ ...current, numberPlate: event.target.value }))
+                  setNewVehicle((current) => ({ ...current, plate: event.target.value }))
                 }
-                style={{ padding: "8px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-base)", color: "var(--text-primary)" }}
               />
-              <select
-                value={newVehicle.connectorType}
+              <input
+                type="number"
+                className="form-input"
+                placeholder="Battery Capacity (kWh)"
+                value={newVehicle.batteryCapacity}
                 onChange={(event) =>
-                  setNewVehicle((current) => ({ ...current, connectorType: event.target.value }))
+                  setNewVehicle((current) => ({ ...current, batteryCapacity: event.target.value }))
                 }
-                style={{ padding: "8px", borderRadius: 6, border: "1px solid var(--border)", background: "var(--bg-base)", color: "var(--text-primary)" }}
-              >
-                <option value="Type 1">Type 1</option>
-                <option value="Type 2">Type 2</option>
-                <option value="CCS">CCS</option>
-                <option value="CHAdeMO">CHAdeMO</option>
-              </select>
+              />
             </div>
             <div style={{ marginTop: 10 }}>
-              <Btn type="submit" variant="primary">Save vehicle</Btn>
+              <button type="submit" className="btn btn-primary">Save vehicle</button>
             </div>
           </form>
         </div>
@@ -102,53 +109,36 @@ export default function Vehicles() {
         </div>
       ) : null}
 
-      <div className="grid-2">
+      <div>
+        {vehicles.length === 0 ? (
+          <div className="empty-state">
+            <div className="icon">🚗</div>
+            <p>No vehicles yet.</p>
+          </div>
+        ) : null}
         {vehicles.map((v) => (
-          <div key={v.vehicle_id} className="card">
-            <div className="card-header">
+          <div key={v.id} className="card" style={{ marginTop: 16 }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                <div
-                  style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 8,
-                    background: "var(--bg-elevated)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontSize: 16,
-                  }}
-                >
-                  CAR
-                </div>
                 <div>
-                  <div style={{ fontSize: 14, fontWeight: 500 }}>{v.vehicle_model}</div>
-                  <div className="text-muted">{v.number_plate}</div>
+                  <div style={{ fontSize: 15, fontWeight: 600 }}>{v.make} {v.model}</div>
+                  <div style={{ color: "var(--text-secondary)", fontSize: ".85rem" }}>{v.plate}</div>
                 </div>
               </div>
-              <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
-                {v.is_default ? (
-                  <Badge status="default" label="Default" />
-                ) : (
-                  <Btn size="sm" onClick={() => runAction(() => setDefaultVehicle(v.vehicle_id))}>Set default</Btn>
-                )}
-                <Btn size="sm" onClick={() => setActionError("Edit vehicle is not implemented yet.")}>Edit</Btn>
-                <Btn
-                  size="sm"
-                  variant="danger"
+              <button
+                  className="btn btn-danger"
                   title={vehicles.length <= 1 ? "you must have at least one car" : "Delete vehicle"}
-                  style={vehicles.length <= 1 ? { opacity: 0.75 } : undefined}
+                  style={vehicles.length <= 1 ? { opacity: 0.75, cursor: "not-allowed" } : undefined}
                   onClick={() => {
                     if (vehicles.length <= 1) {
                       setActionError("you must have at least one car");
                       return;
                     }
-                    runAction(() => deleteVehicle(v.vehicle_id));
+                    runAction(() => removeVehicle(currentUser.id, v.id));
                   }}
                 >
                   Remove
-                </Btn>
-              </div>
+              </button>
             </div>
           <div
             style={{
@@ -159,16 +149,16 @@ export default function Vehicles() {
             }}
           >
             <div>
-              <span className="text-muted">Connector: </span>
-              {v.connector_type}
+              <span style={{ color: "var(--text-secondary)" }}>Model: </span>
+              {v.model}
             </div>
             <div>
-              <span className="text-muted">Plate: </span>
-              {v.number_plate}
+              <span style={{ color: "var(--text-secondary)" }}>Plate: </span>
+              {v.plate}
             </div>
             <div>
-              <span className="text-muted">Added: </span>
-              {v.created_at}
+              <span style={{ color: "var(--text-secondary)" }}>Battery: </span>
+              {v.batteryCapacity ? `${v.batteryCapacity} kWh` : "-"}
             </div>
           </div>
           </div>

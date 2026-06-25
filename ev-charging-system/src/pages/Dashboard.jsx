@@ -1,15 +1,13 @@
 import { useEffect, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import "../styles/dashboard.css";
 import { useAppData } from "../context/AppDataContext";
 
 function Dashboard() {
-  const navigate = useNavigate();
   const {
     currentDriver,
     stations,
     createBooking,
-    logoutUser,
     driverStats,
     driverRecentSessions,
     nearbyStations,
@@ -75,11 +73,6 @@ function Dashboard() {
     }
   };
 
-  const handleLogout = () => {
-    logoutUser();
-    navigate("/login");
-  };
-
   return (
     <main className="dashboard-shell">
       <header className="dashboard-header">
@@ -93,9 +86,6 @@ function Dashboard() {
         <div className="dashboard-actions">
           <button className="secondary-btn" type="button" onClick={() => setShowBookingForm(true)}>
             New Booking
-          </button>
-          <button className="primary-btn" type="button" onClick={handleLogout}>
-            Log Out
           </button>
         </div>
       </header>
@@ -199,7 +189,6 @@ function Dashboard() {
         <article className="panel">
           <div className="panel-heading">
             <h2>Recent Sessions</h2>
-            <Link to="/operator">Switch to operator view</Link>
           </div>
           <div className="table-wrap">
             <table>

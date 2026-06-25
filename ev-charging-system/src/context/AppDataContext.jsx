@@ -1,15 +1,19 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import { apiRequest } from "../services/apiClient";
 import {
+  clearAuthSession,
   clearStoredCurrentUser,
   findStoredAccount,
+  getAuthSession,
   getStoredCurrentUser,
-  getStoredAccounts,
+  hasActiveSession,
+  setAuthSession,
   setStoredCurrentUser,
   upsertStoredAccount,
 } from "../services/authStorage";
 
 const AppDataContext = createContext(null);
+const TWO_HOURS_MS = 2 * 60 * 60 * 1000;
 
 function formatDateLabel(value) {
   const parsed = new Date(value || Date.now());
@@ -46,7 +50,20 @@ async function resolveBackendUserByEmail(email) {
 }
 
 export function AppDataProvider({ children }) {
-  const [currentUser, setCurrentUser] = useState(() => getStoredCurrentUser());
+  const [currentUser, setCurrentUser] = useState(() => {
+    const storedUser = getStoredCurrentUser();
+    if (!storedUser) {
+      return null;
+    }
+
+    if (!hasActiveSession(storedUser.uid || storedUser.id)) {
+      clearStoredCurrentUser();
+      clearAuthSession();
+      return null;
+    }
+
+    return storedUser;
+  });
   const [ports, setPorts] = useState([]);
   const [vehicles, setVehicles] = useState([]);
   const [userBookings, setUserBookings] = useState([]);
@@ -55,7 +72,20 @@ export function AppDataProvider({ children }) {
   const [allSessions, setAllSessions] = useState([]);
   const [violations, setViolations] = useState([]);
   const [userNamesById, setUserNamesById] = useState({});
+  const [vehicleNamesById, setVehicleNamesById] = useState({});
   const [alerts, setAlerts] = useState([]);
+  const [latenessAppeals, setLatenessAppeals] = useState(() => {
+    try {
+      const raw = localStorage.getItem("ev_lateness_appeals");
+      return raw ? JSON.parse(raw) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("ev_lateness_appeals", JSON.stringify(latenessAppeals));
+  }, [latenessAppeals]);
 
   const addNotification = useCallback((message, type = "info") => {
     const notice = {
@@ -71,7 +101,7 @@ export function AppDataProvider({ children }) {
   }, []);
 
   const loadDashboardData = useCallback(async (user) => {
-    const uid = user?.uid || null;
+    const uid = user?.uid || user?.id || null;
 
     if (!uid) {
       setUserBookings([]);
@@ -133,6 +163,22 @@ export function AppDataProvider({ children }) {
       }, {}),
     );
 
+    const vehiclesByUser = await Promise.all(
+      uniqueUserIds.map((id) => apiRequest(`/auth/user/${id}/vehicles`).catch(() => [])),
+    );
+
+    const vehicleLookup = vehiclesByUser
+      .flat()
+      .filter(Boolean)
+      .reduce((acc, vehicle) => {
+        if (vehicle?.vehicle_id) {
+          acc[vehicle.vehicle_id] = vehicle.vehicle_model || vehicle.number_plate || vehicle.vehicle_id;
+        }
+        return acc;
+      }, {});
+
+    setVehicleNamesById(vehicleLookup);
+
     const violationsByUser = await Promise.all(
       uniqueUserIds.map((id) => apiRequest(`/violations/user/${id}`).catch(() => [])),
     );
@@ -145,31 +191,41 @@ export function AppDataProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    if (currentUser?.uid) {
-      return;
-    }
-
-    const accounts = getStoredAccounts();
-    if (accounts.length === 0) {
-      return;
-    }
-
-    const fallbackAccount = accounts[0];
-    apiRequest(`/auth/user/${fallbackAccount.uid}`)
-      .then((backendUser) => {
-        setStoredCurrentUser(backendUser);
-        setCurrentUser(backendUser);
-      })
-      .catch(() => {
-        // Keep app usable even if no stored user can be restored.
-      });
-  }, [currentUser]);
-
-  useEffect(() => {
     loadDashboardData(currentUser).catch((error) => {
       addNotification(`Failed to refresh data: ${error.message}`, "warning");
     });
   }, [addNotification, currentUser, loadDashboardData]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+
+    const session = getAuthSession();
+    const uid = currentUser.uid || currentUser.id;
+    if (!session || session.uid !== uid) {
+      clearStoredCurrentUser();
+      clearAuthSession();
+      setCurrentUser(null);
+    }
+  }, [currentUser]);
+
+  useEffect(() => {
+    if (!currentUser) {
+      return;
+    }
+
+    const timer = setInterval(() => {
+      const uid = currentUser.uid || currentUser.id;
+      if (!hasActiveSession(uid)) {
+        clearStoredCurrentUser();
+        clearAuthSession();
+        setCurrentUser(null);
+      }
+    }, 30000);
+
+    return () => clearInterval(timer);
+  }, [currentUser]);
 
   const ensureDefaultVehicle = useCallback(async (uid, connectorType = "Type 2") => {
     const vehicles = await apiRequest(`/auth/user/${uid}/vehicles`);
@@ -218,6 +274,7 @@ export function AppDataProvider({ children }) {
         upsertStoredAccount({ email, password, uid, role });
         const backendUser = await apiRequest(`/auth/user/${uid}`);
         setStoredCurrentUser(backendUser);
+        setAuthSession(backendUser);
         setCurrentUser(backendUser);
         addNotification("Account created and synced with backend.", "success");
         return backendUser;
@@ -253,19 +310,75 @@ export function AppDataProvider({ children }) {
     }
 
     setStoredCurrentUser(backendUser);
+    setAuthSession(backendUser);
     setCurrentUser(backendUser);
     return backendUser;
   }, []);
 
   const logoutUser = useCallback(() => {
+    clearAuthSession();
     clearStoredCurrentUser();
     setCurrentUser(null);
     setAlerts([]);
   }, []);
 
+  const login = useCallback(
+    async (email, password) => {
+      try {
+        const backendUser = await loginUser(email, password);
+        return {
+          ok: true,
+          user: {
+            ...backendUser,
+            id: backendUser?.uid || backendUser?.id,
+          },
+        };
+      } catch (error) {
+        return { ok: false, error: error.message || "Invalid credentials" };
+      }
+    },
+    [loginUser],
+  );
+
+  const logout = useCallback(() => {
+    logoutUser();
+  }, [logoutUser]);
+
+  const registerUserCompat = useCallback(
+    async ({ name, email, password, role = "driver", vehicle }) => {
+      try {
+        const vehicleModel = vehicle
+          ? [vehicle.make, vehicle.model].filter(Boolean).join(" ").trim() || "EV Model"
+          : "EV Model";
+        const numberPlate = vehicle?.plate || `EV-${Math.floor(1000 + Math.random() * 9000)}`;
+        const backendUser = await registerUser({
+          fullName: name,
+          email,
+          phone: "N/A",
+          password,
+          role,
+          vehicleModel,
+          numberPlate,
+          connectorType: "Type 2",
+        });
+        return {
+          ok: true,
+          user: {
+            ...backendUser,
+            id: backendUser?.uid || backendUser?.id,
+          },
+        };
+      } catch (error) {
+        return { ok: false, error: error.message || "Unable to register." };
+      }
+    },
+    [registerUser],
+  );
+
   const createBooking = useCallback(
     async (payload) => {
-      if (!currentUser?.uid) {
+      const currentUid = currentUser?.uid || currentUser?.id;
+      if (!currentUid) {
         throw new Error("Please log in first.");
       }
 
@@ -286,7 +399,7 @@ export function AppDataProvider({ children }) {
 
       const vehicleId =
         selectedVehicleId ||
-        (await ensureDefaultVehicle(currentUser.uid, selectedPort.connector_type || "Type 2"));
+        (await ensureDefaultVehicle(currentUid, selectedPort.connector_type || "Type 2"));
 
       const batteryLevel =
         batteryLevelValue === null || batteryLevelValue === undefined || batteryLevelValue === ""
@@ -300,7 +413,7 @@ export function AppDataProvider({ children }) {
       const bookingResult = await apiRequest("/bookings/", {
         method: "POST",
         body: JSON.stringify({
-          user_id: currentUser.uid,
+          user_id: currentUid,
           vehicle_id: vehicleId,
           port_id: stationId,
           is_priority: isPriority,
@@ -317,7 +430,7 @@ export function AppDataProvider({ children }) {
       await apiRequest("/queue/join", {
         method: "POST",
         body: JSON.stringify({
-          user_id: currentUser.uid,
+          user_id: currentUid,
           vehicle_id: vehicleId,
           booking_id: bookingId,
           port_id: stationId,
@@ -430,11 +543,12 @@ export function AppDataProvider({ children }) {
 
   const addVehicle = useCallback(
     async ({ vehicleModel, numberPlate, connectorType }) => {
-      if (!currentUser?.uid) {
+      const currentUid = currentUser?.uid || currentUser?.id;
+      if (!currentUid) {
         throw new Error("Please log in first.");
       }
 
-      await apiRequest(`/auth/user/${currentUser.uid}/vehicles`, {
+      await apiRequest(`/auth/user/${currentUid}/vehicles`, {
         method: "POST",
         body: JSON.stringify({
           vehicle_model: vehicleModel,
@@ -450,11 +564,12 @@ export function AppDataProvider({ children }) {
 
   const setDefaultVehicle = useCallback(
     async (vehicleId) => {
-      if (!currentUser?.uid) {
+      const currentUid = currentUser?.uid || currentUser?.id;
+      if (!currentUid) {
         throw new Error("Please log in first.");
       }
 
-      await apiRequest(`/auth/user/${currentUser.uid}/vehicles/${vehicleId}/default`, {
+      await apiRequest(`/auth/user/${currentUid}/vehicles/${vehicleId}/default`, {
         method: "PUT",
       });
       addNotification("Default vehicle updated.", "success");
@@ -465,17 +580,110 @@ export function AppDataProvider({ children }) {
 
   const deleteVehicle = useCallback(
     async (vehicleId) => {
-      if (!currentUser?.uid) {
+      const currentUid = currentUser?.uid || currentUser?.id;
+      if (!currentUid) {
         throw new Error("Please log in first.");
       }
 
-      await apiRequest(`/auth/user/${currentUser.uid}/vehicles/${vehicleId}`, {
+      await apiRequest(`/auth/user/${currentUid}/vehicles/${vehicleId}`, {
         method: "DELETE",
       });
       addNotification("Vehicle deleted.", "warning");
       await loadDashboardData(currentUser);
     },
     [addNotification, currentUser, loadDashboardData],
+  );
+
+  const addVehicleCompat = useCallback(
+    async (arg1, arg2) => {
+      if (arg2) {
+        const vehicle = arg2;
+        await addVehicle({
+          vehicleModel: [vehicle.make, vehicle.model].filter(Boolean).join(" ").trim() || "EV Model",
+          numberPlate: vehicle.plate || vehicle.numberPlate || `EV-${Math.floor(1000 + Math.random() * 9000)}`,
+          connectorType: vehicle.connectorType || "Type 2",
+        });
+        return;
+      }
+
+      await addVehicle(arg1);
+    },
+    [addVehicle],
+  );
+
+  const removeVehicle = useCallback(
+    async (userId, vehicleId) => {
+      const idToDelete = vehicleId || userId;
+      await deleteVehicle(idToDelete);
+    },
+    [deleteVehicle],
+  );
+
+  const joinQueue = useCallback(
+    async (stationId, vehicleId, batteryLevel, isEmergency = false) => {
+      try {
+        await createBooking({
+          stationId,
+          vehicleId,
+          is_priority: isEmergency,
+          batteryLevel,
+        });
+        return { ok: true };
+      } catch (error) {
+        return { ok: false, error: error.message || "Unable to join queue." };
+      }
+    },
+    [createBooking],
+  );
+
+  const submitAppeal = useCallback((userId, reason) => {
+    setLatenessAppeals((current) => ({
+      ...current,
+      [userId]: {
+        reason,
+        submittedAt: new Date().toISOString(),
+      },
+    }));
+    return { ok: true };
+  }, []);
+
+  const submitNoShowReason = useCallback(
+    async (entryId, reason) => {
+      const trimmedReason = String(reason || "").trim();
+      if (!entryId) {
+        throw new Error("Queue entry id is required.");
+      }
+      if (!trimmedReason) {
+        throw new Error("Please provide a reason.");
+      }
+
+      const currentUid = currentUser?.uid || currentUser?.id;
+      const pendingViolation = violations
+        .filter(
+          (item) =>
+            item.user_id === currentUid &&
+            item.status === "pending" &&
+            item.is_deleted !== true &&
+            item.reason === "No show at charging port" &&
+            !item.no_show_reason,
+        )
+        .sort((a, b) => new Date(b.no_show_at || b.created_at || 0) - new Date(a.no_show_at || a.created_at || 0))[0];
+
+      if (!pendingViolation?.violation_id) {
+        throw new Error("No pending no-show violation found to submit a reason for.");
+      }
+
+      await apiRequest(`/violations/${pendingViolation.violation_id}/reason`, {
+        method: "PUT",
+        body: JSON.stringify({
+          reason: trimmedReason,
+        }),
+      });
+
+      addNotification("Reason submitted for operator review.", "success");
+      await loadDashboardData(currentUser);
+    },
+    [addNotification, currentUser, loadDashboardData, violations],
   );
 
   const updatePortStatus = useCallback(
@@ -515,7 +723,42 @@ export function AppDataProvider({ children }) {
     [addNotification, currentUser, loadDashboardData],
   );
 
+  const reviewViolation = useCallback(
+    async ({ violationId, action, reviewedBy }) => {
+      if (!violationId) {
+        throw new Error("Violation id is required.");
+      }
+
+      if (action !== "keep" && action !== "discard") {
+        throw new Error("Action must be keep or discard.");
+      }
+
+      const operatorId = reviewedBy || currentUser?.uid || currentUser?.id;
+      if (!operatorId) {
+        throw new Error("Operator id is required.");
+      }
+
+      await apiRequest(`/violations/${violationId}/review`, {
+        method: "PUT",
+        body: JSON.stringify({
+          action,
+          operator_id: operatorId,
+          reviewed_by: operatorId,
+        }),
+      });
+
+      addNotification(
+        action === "discard" ? "Violation discarded." : "Violation kept.",
+        action === "discard" ? "success" : "warning",
+      );
+      await loadDashboardData(currentUser);
+    },
+    [addNotification, currentUser, loadDashboardData],
+  );
+
   const value = useMemo(() => {
+    const currentUid = currentUser?.uid || currentUser?.id;
+
     const stations = ports.map((port, index) => ({
       id: port.port_id,
       name: port.port_name || `Charging Port ${index + 1}`,
@@ -531,7 +774,7 @@ export function AppDataProvider({ children }) {
       return acc;
     }, {});
 
-    const myQueueEntry = queueEntries.find((item) => item.user_id === currentUser?.uid) || null;
+    const myQueueEntry = queueEntries.find((item) => item.user_id === currentUid) || null;
 
     const queueDisplay = queueEntries
       .slice()
@@ -539,7 +782,7 @@ export function AppDataProvider({ children }) {
       .map((item) => ({
         ...item,
         user_name: userNamesById[item.user_id] || item.user_id,
-        vehicle_model: item.vehicle_model || item.vehicle_id,
+        vehicle_model: item.vehicle_model || vehicleNamesById[item.vehicle_id] || item.vehicle_id,
         port_name: portNameById[item.port_id] || item.port_id,
       }));
 
@@ -548,7 +791,7 @@ export function AppDataProvider({ children }) {
       .map((item) => ({
         ...item,
         user_name: userNamesById[item.user_id] || item.user_id,
-        vehicle_model: item.vehicle_model || item.vehicle_id,
+        vehicle_model: item.vehicle_model || vehicleNamesById[item.vehicle_id] || item.vehicle_id,
         port_name: portNameById[item.port_id] || item.port_id,
         start_time: formatTimeLabel(item.start_time),
       }));
@@ -565,6 +808,10 @@ export function AppDataProvider({ children }) {
         ...item,
         user_name: userNamesById[item.user_id] || item.user_id,
       }));
+
+    const pendingViolations = violationsDisplay.filter(
+      (item) => item.status === "pending" && item.is_deleted !== true,
+    );
 
     const queueBookings = queueEntries
       .filter((item) => item.status === "waiting" || item.status === "called")
@@ -644,7 +891,7 @@ export function AppDataProvider({ children }) {
 
     const driverStats = {
       activeBookings: queueEntries.filter(
-        (item) => item.user_id === currentUser?.uid && (item.status === "waiting" || item.status === "called"),
+        (item) => item.user_id === currentUid && (item.status === "waiting" || item.status === "called"),
       ).length,
       completedSessions: userSessions.filter((item) => item.status === "completed").length,
       energyUsed: Number(
@@ -668,20 +915,74 @@ export function AppDataProvider({ children }) {
       availability: `${station.availablePorts} ports available`,
     }));
 
+    const vehiclesCompat = vehicles.map((item) => ({
+      id: item.vehicle_id,
+      make: item.vehicle_model,
+      model: "",
+      plate: item.number_plate,
+      batteryCapacity: null,
+    }));
+
+    const currentUserCompat = currentUser
+      ? {
+          ...currentUser,
+          id: currentUser.uid || currentUser.id,
+          vehicles: vehiclesCompat,
+          banned: (() => {
+            const serverBan = Boolean(currentUser.is_banned);
+            const inferredBan = violationsDisplay.some(
+              (item) =>
+                item.user_id === (currentUser.uid || currentUser.id) &&
+                item.is_deleted !== true &&
+                Date.now() - new Date(item.no_show_at || item.created_at || 0).getTime() >= TWO_HOURS_MS,
+            );
+            return serverBan || inferredBan;
+          })(),
+          banStart:
+            currentUser.ban_start ||
+            violationsDisplay
+              .filter(
+                (item) =>
+                  item.user_id === (currentUser.uid || currentUser.id) &&
+                  item.is_deleted !== true,
+              )
+              .map((item) => item.no_show_at || item.created_at)
+              .filter(Boolean)
+              .sort()[0] ||
+            null,
+        }
+      : null;
+
+    const bookingsCompat = queueEntries
+      .filter((item) => item.user_id === currentUid)
+      .map((item) => ({
+        id: item.entry_id,
+        userId: item.user_id,
+        userName: userNamesById[item.user_id] || item.user_id,
+        stationId: item.port_id,
+        vehicleId: item.vehicle_id,
+        batteryLevel: Number(item.battery_level ?? 0),
+        emergency: Boolean(item.is_priority),
+        priority: Boolean(item.is_priority),
+        status: item.status,
+        joinedAt: item.arrived_at,
+      }));
+
     return {
-      currentUser,
+      currentUser: currentUserCompat,
       currentDriver: currentUser?.name || "Driver",
       currentRole: currentUser?.role || "driver",
       stations,
       ports,
       vehicles,
-      bookings: userBookings,
+      bookings: bookingsCompat,
       bookingsDisplay,
       queueEntries,
       queueDisplay,
       myQueueEntry,
       sessionsDisplay,
       violations: violationsDisplay,
+      pendingViolations,
       queueBookings,
       activeSessions,
       completedSessions,
@@ -693,19 +994,27 @@ export function AppDataProvider({ children }) {
       cancelUserBooking,
       delayQueueEntry,
       markQueueNoShow,
-      addVehicle,
+      addVehicle: addVehicleCompat,
+      removeVehicle,
       setDefaultVehicle,
       deleteVehicle,
       updatePortStatus,
       issueViolation,
       liftViolation,
+      reviewViolation,
+      joinQueue,
+      submitAppeal,
+      submitNoShowReason,
+      latenessAppeals,
       startCharging,
       completeSession,
       cancelBooking,
       driverStats,
       driverRecentSessions,
       nearbyStations,
-      registerUser,
+      registerUser: registerUserCompat,
+      login,
+      logout,
       loginUser,
       logoutUser,
       refreshData: () => loadDashboardData(currentUser),
@@ -720,16 +1029,27 @@ export function AppDataProvider({ children }) {
     dismissNotification,
     issueViolation,
     liftViolation,
+    reviewViolation,
+    joinQueue,
+    latenessAppeals,
+    login,
     markQueueNoShow,
     loadDashboardData,
     loginUser,
+    logout,
+    vehicleNamesById,
     vehicles,
     alerts,
     ports,
     queueEntries,
     violations,
     registerUser,
+    registerUserCompat,
+    removeVehicle,
     addVehicle,
+    addVehicleCompat,
+    submitAppeal,
+    submitNoShowReason,
     setDefaultVehicle,
     deleteVehicle,
     startCharging,

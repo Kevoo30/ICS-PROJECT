@@ -1,214 +1,132 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
-import "../styles/register.css";
+import { useNavigate, Link } from "react-router-dom";
 import { useAppData } from "../context/AppDataContext";
 
-function Register() {
-  const navigate = useNavigate();
+export default function Register() {
   const { registerUser } = useAppData();
-  const [formData, setFormData] = useState({
-    fullName: "",
-    email: "",
-    phone: "",
-    password: "",
-    confirmPassword: "",
-    vehicleModel: "",
-    numberPlate: "",
-    connectorType: "Type 2",
-    agreeToTerms: false,
+  const navigate = useNavigate();
+  const [role, setRole] = useState("driver");
+  const [form, setForm] = useState({
+    name: "", email: "", password: "", confirm: "",
   });
+  const [addVehicle, setAddVehicle] = useState(false);
+  const [vehicle, setVehicle] = useState({ make: "", model: "", plate: "", batteryCapacity: "" });
   const [error, setError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const updateField = (event) => {
-    const { name, value, type, checked } = event.target;
-    setFormData((current) => ({
-      ...current,
-      [name]: type === "checkbox" ? checked : value,
-    }));
-  };
-
-  const handleSubmit = async (event) => {
-    event.preventDefault();
-
-    if (!formData.fullName.trim() || !formData.email.trim() || !formData.password.trim()) {
-      setError("Full name, email, and password are required.");
-      return;
-    }
-
-    if (!formData.vehicleModel.trim() || !formData.numberPlate.trim()) {
-      setError("Vehicle model and number plate are required.");
-      return;
-    }
-
-    if (formData.password.length < 8) {
-      setError("Password must be at least 8 characters long.");
-      return;
-    }
-
-    if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match.");
-      return;
-    }
-
-    if (!formData.agreeToTerms) {
-      setError("Please agree to the terms before creating an account.");
-      return;
-    }
-
-    setError("");
-
-    setIsSubmitting(true);
-
-    try {
-      await registerUser(formData);
-      navigate("/login", {
-        state: {
-          registered: true,
-          email: formData.email,
-        },
-      });
-    } catch (submitError) {
-      setError(submitError.message || "Unable to register.");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
+  async function handleSubmit(e) {
+    e.preventDefault();
+    if (form.password !== form.confirm) return setError("Passwords do not match");
+    const result = await registerUser({
+      name: form.name,
+      email: form.email,
+      password: form.password,
+      role,
+      vehicle: role === "driver" && addVehicle ? vehicle : null,
+    });
+    if (!result.ok) return setError(result.error);
+    navigate(result.user?.role === "operator" ? "/operator/dashboard" : "/dashboard");
+  }
 
   return (
-    <main className="register-shell">
-      <section className="register-card" aria-labelledby="register-title">
-        <div className="register-header">
-          <p className="register-kicker">EV Charging System</p>
-          <h1 id="register-title">Create Account</h1>
-          <p className="register-subtitle">
-            Register once to book charging ports and manage your sessions.
-          </p>
+    <div className="auth-wrapper">
+      <div className="auth-box" style={{ maxWidth: 480 }}>
+        <h1 className="auth-title">Create Account</h1>
+        <p className="auth-subtitle">
+          {role === "operator"
+            ? "Create an operator account"
+            : "Join the EV Charging System as a driver"}
+        </p>
+
+        <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+          <button
+            type="button"
+            className={`btn ${role === "driver" ? "btn-primary" : "btn-secondary"}`}
+            style={{ flex: 1 }}
+            onClick={() => setRole("driver")}
+          >
+            Driver Signup
+          </button>
+          <button
+            type="button"
+            className={`btn ${role === "operator" ? "btn-primary" : "btn-secondary"}`}
+            style={{ flex: 1 }}
+            onClick={() => {
+              setRole("operator");
+              setAddVehicle(false);
+            }}
+          >
+            Operator Signup
+          </button>
         </div>
 
-        <form className="register-form" onSubmit={handleSubmit}>
-          <label htmlFor="register-name">Full Name</label>
-          <input
-            id="register-name"
-            type="text"
-            name="fullName"
-            value={formData.fullName}
-            onChange={updateField}
-            placeholder="Jane Doe"
-            autoComplete="name"
-            required
-          />
+        {error && <div className="alert alert-danger">{error}</div>}
 
-          <label htmlFor="register-email">Email</label>
-          <input
-            id="register-email"
-            type="email"
-            name="email"
-            value={formData.email}
-            onChange={updateField}
-            placeholder="you@example.com"
-            autoComplete="email"
-            required
-          />
+        <form onSubmit={handleSubmit}>
+          {/* Basic info */}
+          <div className="form-group">
+            <label className="form-label">Full Name</label>
+            <input className="form-input" required value={form.name}
+              onChange={e => setForm(p => ({ ...p, name: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Email</label>
+            <input className="form-input" type="email" required value={form.email}
+              onChange={e => setForm(p => ({ ...p, email: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Password</label>
+            <input className="form-input" type="password" required value={form.password}
+              onChange={e => setForm(p => ({ ...p, password: e.target.value }))} />
+          </div>
+          <div className="form-group">
+            <label className="form-label">Confirm Password</label>
+            <input className="form-input" type="password" required value={form.confirm}
+              onChange={e => setForm(p => ({ ...p, confirm: e.target.value }))} />
+          </div>
 
-          <label htmlFor="register-phone">Phone Number</label>
-          <input
-            id="register-phone"
-            type="tel"
-            name="phone"
-            value={formData.phone}
-            onChange={updateField}
-            placeholder="+254 712 345 678"
-            autoComplete="tel"
-          />
-
-          <label htmlFor="register-password">Password</label>
-          <input
-            id="register-password"
-            type="password"
-            name="password"
-            value={formData.password}
-            onChange={updateField}
-            placeholder="Create password"
-            autoComplete="new-password"
-            required
-          />
-
-          <label htmlFor="register-vehicle-model">Vehicle Model</label>
-          <input
-            id="register-vehicle-model"
-            type="text"
-            name="vehicleModel"
-            value={formData.vehicleModel}
-            onChange={updateField}
-            placeholder="Nissan Leaf"
-            required
-          />
-
-          <label htmlFor="register-number-plate">Number Plate</label>
-          <input
-            id="register-number-plate"
-            type="text"
-            name="numberPlate"
-            value={formData.numberPlate}
-            onChange={updateField}
-            placeholder="KDA 123A"
-            required
-          />
-
-          <label htmlFor="register-connector-type">Connector Type</label>
-          <select
-            id="register-connector-type"
-            name="connectorType"
-            value={formData.connectorType}
-            onChange={updateField}
-          >
-            <option value="Type 1">Type 1</option>
-            <option value="Type 2">Type 2</option>
-            <option value="CCS">CCS</option>
-            <option value="CHAdeMO">CHAdeMO</option>
-          </select>
-
-          <label htmlFor="register-confirm-password">Confirm Password</label>
-          <input
-            id="register-confirm-password"
-            type="password"
-            name="confirmPassword"
-            value={formData.confirmPassword}
-            onChange={updateField}
-            placeholder="Repeat password"
-            autoComplete="new-password"
-            required
-          />
-
-          {error ? (
-            <p className="register-error" role="alert">
-              {error}
-            </p>
+          {/* Optional vehicle */}
+          {role === "driver" ? (
+            <label className="checkbox-row">
+              <input type="checkbox" checked={addVehicle} onChange={e => setAddVehicle(e.target.checked)} />
+              Add a vehicle now (you can do this later)
+            </label>
           ) : null}
 
-          <label className="register-terms" htmlFor="register-terms">
-            <input
-              id="register-terms"
-              type="checkbox"
-              name="agreeToTerms"
-              checked={formData.agreeToTerms}
-              onChange={updateField}
-            />
-            I agree to the terms and privacy policy.
-          </label>
+          {role === "driver" && addVehicle && (
+            <div style={{ background: "var(--bg-hover)", borderRadius: "var(--radius)", padding: "16px", marginBottom: "16px" }}>
+              <p className="page-subheading" style={{ marginBottom: "12px" }}>Vehicle Details</p>
+              <div className="form-group">
+                <label className="form-label">Make</label>
+                <input className="form-input" value={vehicle.make}
+                  onChange={e => setVehicle(p => ({ ...p, make: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Model</label>
+                <input className="form-input" value={vehicle.model}
+                  onChange={e => setVehicle(p => ({ ...p, model: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Plate Number</label>
+                <input className="form-input" value={vehicle.plate}
+                  onChange={e => setVehicle(p => ({ ...p, plate: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Battery Capacity (kWh)</label>
+                <input className="form-input" type="number" value={vehicle.batteryCapacity}
+                  onChange={e => setVehicle(p => ({ ...p, batteryCapacity: e.target.value }))} />
+              </div>
+            </div>
+          )}
 
-          <button type="submit" className="register-btn" disabled={isSubmitting}>
-            {isSubmitting ? "Creating Account..." : "Create Account"}
+          <button className="btn btn-primary" style={{ width: "100%", padding: "11px" }} type="submit">
+            Create Account
           </button>
         </form>
 
-        <p className="register-footer">
-          Already registered? <Link to="/login">Sign in here</Link>
+        <p style={{ textAlign: "center", marginTop: "20px", fontSize: ".88rem", color: "var(--text-secondary)" }}>
+          Already have an account? <Link className="auth-link" to="/login">Sign in</Link>
         </p>
-      </section>
-    </main>
+      </div>
+    </div>
   );
 }
-
-export default Register;
