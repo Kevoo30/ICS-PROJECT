@@ -1,22 +1,29 @@
 import { useEffect, useState } from "react";
 import "../styles/dashboard.css";
 import { useAppData } from "../context/AppDataContext";
+import { Btn } from "../components/ui";
+
+function getCurrentTimeValue() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
 
 function parseBookingDateTime(dateText, timeText) {
   const rawDate = String(dateText || "").trim();
   const rawTime = String(timeText || "").trim().toLowerCase();
 
   const dmyDate = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(rawDate);
+  const ymdDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(rawDate);
   const hhmm24 = /^([01]?\d|2[0-3])(?::([0-5]\d))?$/.exec(rawTime);
   const hhmm12 = /^(\d{1,2})(?::([0-5]\d))?\s*(am|pm)$/.exec(rawTime);
 
-  if (!dmyDate || (!hhmm24 && !hhmm12)) {
+  if ((!dmyDate && !ymdDate) || (!hhmm24 && !hhmm12)) {
     return null;
   }
 
-  const day = Number(dmyDate[1]);
-  const month = Number(dmyDate[2]);
-  const year = Number(dmyDate[3]);
+  const day = Number(dmyDate ? dmyDate[1] : ymdDate[3]);
+  const month = Number(dmyDate ? dmyDate[2] : ymdDate[2]);
+  const year = Number(dmyDate ? dmyDate[3] : ymdDate[1]);
   let hours = 0;
   let minutes = 0;
 
@@ -67,7 +74,7 @@ function Dashboard() {
   const [bookingForm, setBookingForm] = useState({
     vehicleId: "",
     bookingDate: "",
-    bookingTime: "",
+    bookingTime: getCurrentTimeValue(),
     batteryPercentage: "20",
   });
   const [bookingError, setBookingError] = useState("");
@@ -105,7 +112,7 @@ function Dashboard() {
 
     const bookingDateTime = parseBookingDateTime(bookingForm.bookingDate, bookingForm.bookingTime);
     if (!bookingDateTime || Number.isNaN(bookingDateTime.getTime()) || bookingDateTime.getTime() <= Date.now()) {
-      setBookingError("Use Date DD/MM/YYYY and a valid time (24h or 12h), then pick a future time.");
+      setBookingError("Pick a valid future date and time.");
       return;
     }
 
@@ -122,7 +129,7 @@ function Dashboard() {
       setBookingForm((current) => ({
         ...current,
         bookingDate: "",
-        bookingTime: "",
+        bookingTime: getCurrentTimeValue(),
         batteryPercentage: "20",
       }));
     } catch (submitError) {
@@ -141,9 +148,9 @@ function Dashboard() {
           </p>
         </div>
         <div className="dashboard-actions">
-          <button className="secondary-btn" type="button" onClick={() => setShowBookingForm(true)}>
-            New Booking
-          </button>
+          <Btn variant="primary" type="button" onClick={() => setShowBookingForm((current) => !current)}>
+            {showBookingForm ? "Close" : "+ Add booking"}
+          </Btn>
         </div>
       </header>
 
@@ -178,27 +185,25 @@ function Dashboard() {
             <input
               id="booking-date"
               name="bookingDate"
-              type="text"
-              placeholder="DD/MM/YYYY"
+              className="booking-picker-input"
+              type="date"
               value={bookingForm.bookingDate}
               onChange={handleBookingField}
-              inputMode="text"
+              min={new Date().toISOString().slice(0, 10)}
               required
             />
-            <div className="text-muted" style={{ marginTop: -6, marginBottom: 4 }}>Format: DD/MM/YYYY</div>
+            <div className="text-muted" style={{ marginTop: -6, marginBottom: 4 }}>Use the calendar picker</div>
 
             <label htmlFor="booking-time">Time</label>
             <input
               id="booking-time"
               name="bookingTime"
-              type="text"
-              placeholder="HH:MM or 3pm"
+              className="booking-picker-input"
+              type="time"
               value={bookingForm.bookingTime}
               onChange={handleBookingField}
-              inputMode="text"
               required
             />
-            <div className="text-muted" style={{ marginTop: -6, marginBottom: 4 }}>Format: HH:MM (24-hour) or 3pm / 3:15 PM</div>
 
             <label htmlFor="booking-battery">Battery Percentage</label>
             <input

@@ -2,21 +2,27 @@ import React, { useRef, useState } from "react";
 import { Badge, Btn } from "../components/ui";
 import { useAppData } from "../context/AppDataContext";
 
+function getCurrentTimeValue() {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+}
+
 function parseBookingDateTime(dateText, timeText) {
   const rawDate = String(dateText || "").trim();
   const rawTime = String(timeText || "").trim().toLowerCase();
 
   const dmyDate = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(rawDate);
+  const ymdDate = /^(\d{4})-(\d{2})-(\d{2})$/.exec(rawDate);
   const hhmm24 = /^([01]?\d|2[0-3])(?::([0-5]\d))?$/.exec(rawTime);
   const hhmm12 = /^(\d{1,2})(?::([0-5]\d))?\s*(am|pm)$/.exec(rawTime);
 
-  if (!dmyDate || (!hhmm24 && !hhmm12)) {
+  if ((!dmyDate && !ymdDate) || (!hhmm24 && !hhmm12)) {
     return null;
   }
 
-  const day = Number(dmyDate[1]);
-  const month = Number(dmyDate[2]);
-  const year = Number(dmyDate[3]);
+  const day = Number(dmyDate ? dmyDate[1] : ymdDate[3]);
+  const month = Number(dmyDate ? dmyDate[2] : ymdDate[2]);
+  const year = Number(dmyDate ? dmyDate[3] : ymdDate[1]);
   let hours = 0;
   let minutes = 0;
 
@@ -69,7 +75,7 @@ export default function Bookings() {
   const [bookingForm, setBookingForm] = useState({
     vehicle_id: "",
     booking_date: "",
-    booking_time: "",
+    booking_time: getCurrentTimeValue(),
     battery_level: "20",
   });
 
@@ -108,7 +114,7 @@ export default function Bookings() {
 
       const bookingDateTime = parseBookingDateTime(bookingForm.booking_date, bookingForm.booking_time);
       if (!bookingDateTime || Number.isNaN(bookingDateTime.getTime()) || bookingDateTime.getTime() <= Date.now()) {
-        throw new Error("Use Date DD/MM/YYYY and a valid time (24h or 12h), then pick a future time.");
+        throw new Error("Pick a valid future date and time.");
       }
 
       await createBooking({
@@ -117,7 +123,7 @@ export default function Bookings() {
         preferred_time: formatDateTimeForBooking(bookingDateTime),
       });
       setShowBookingForm(false);
-      setBookingForm({ vehicle_id: "", booking_date: "", booking_time: "", battery_level: "20" });
+      setBookingForm({ vehicle_id: "", booking_date: "", booking_time: getCurrentTimeValue(), battery_level: "20" });
     } finally {
       bookingSubmitLockRef.current = false;
       setIsSubmittingBooking(false);
@@ -179,13 +185,13 @@ export default function Bookings() {
               <div>
                 <div className="text-muted" style={{ marginBottom: 4 }}>Date</div>
                 <input
-                  type="text"
-                  placeholder="DD/MM/YYYY"
+                  type="date"
+                  className="booking-picker-input"
                   value={bookingForm.booking_date}
                   onChange={(event) =>
                     setBookingForm((current) => ({ ...current, booking_date: event.target.value }))
                   }
-                  inputMode="text"
+                  min={new Date().toISOString().slice(0, 10)}
                   disabled={isSubmittingBooking}
                   style={{
                     width: "100%",
@@ -197,19 +203,18 @@ export default function Bookings() {
                   }}
                   required
                 />
-                <div className="text-muted" style={{ marginTop: 4 }}>Format: DD/MM/YYYY</div>
+                <div className="text-muted" style={{ marginTop: 4 }}>Use the calendar picker</div>
               </div>
 
               <div>
                 <div className="text-muted" style={{ marginBottom: 4 }}>Time</div>
                 <input
-                  type="text"
-                  placeholder="HH:MM or 3pm"
+                  type="time"
+                  className="booking-picker-input"
                   value={bookingForm.booking_time}
                   onChange={(event) =>
                     setBookingForm((current) => ({ ...current, booking_time: event.target.value }))
                   }
-                  inputMode="text"
                   disabled={isSubmittingBooking}
                   style={{
                     width: "100%",
@@ -221,7 +226,6 @@ export default function Bookings() {
                   }}
                   required
                 />
-                <div className="text-muted" style={{ marginTop: 4 }}>Format: HH:MM (24-hour) or 3pm / 3:15 PM</div>
               </div>
 
               <div>

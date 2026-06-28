@@ -201,6 +201,28 @@ body {
 }
 .form-textarea { resize: vertical; min-height: 80px; }
 
+/* Dark-mode visibility for native date/time pickers used in booking form */
+body:not(.light-mode) .booking-picker-input {
+  color-scheme: dark;
+  background: var(--bg-surface) !important;
+  border-color: #4b5563 !important;
+  color: var(--text-primary) !important;
+}
+
+body:not(.light-mode) .booking-picker-input::-webkit-calendar-picker-indicator {
+  filter: invert(95%) brightness(1.2);
+  opacity: 1;
+  cursor: pointer;
+}
+
+body:not(.light-mode) .booking-picker-input::-webkit-datetime-edit,
+body:not(.light-mode) .booking-picker-input::-webkit-datetime-edit-fields-wrapper,
+body:not(.light-mode) .booking-picker-input::-webkit-datetime-edit-text,
+body:not(.light-mode) .booking-picker-input::-webkit-datetime-edit-hour-field,
+body:not(.light-mode) .booking-picker-input::-webkit-datetime-edit-minute-field {
+  color: var(--text-primary);
+}
+
 /* ── Table ─────────────────────────────────────────────── */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; font-size: .88rem; }

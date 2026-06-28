@@ -431,8 +431,8 @@ export function AppDataProvider({ children }) {
           ? null
           : Number(batteryLevelValue);
 
-      if (isPriority && (Number.isNaN(batteryLevel) || batteryLevel < 1 || batteryLevel > 100)) {
-        throw new Error("Battery level must be between 1 and 100 for priority bookings.");
+      if (Number.isNaN(batteryLevel) || batteryLevel < 1 || batteryLevel > 100) {
+        throw new Error("Battery level must be between 1 and 100.");
       }
 
       const bookingResult = await apiRequest("/bookings/", {
@@ -442,7 +442,7 @@ export function AppDataProvider({ children }) {
           vehicle_id: vehicleId,
           port_id: portId,
           is_priority: isPriority,
-          battery_level: isPriority ? batteryLevel : null,
+          battery_level: batteryLevel,
           preferred_time: preferredTime,
         }),
       });
@@ -461,7 +461,7 @@ export function AppDataProvider({ children }) {
           port_id: portId,
           entry_type: "booking",
           is_priority: isPriority,
-          battery_level: isPriority ? batteryLevel : null,
+          battery_level: batteryLevel,
           preferred_time: preferredTime,
         }),
       });

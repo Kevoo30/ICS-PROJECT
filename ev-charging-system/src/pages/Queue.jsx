@@ -3,9 +3,14 @@ import { Badge, Btn, Battery } from "../components/ui";
 import { useAppData } from "../context/AppDataContext";
 
 export default function Queue() {
-  const { myQueueEntry, queueDisplay, currentUser, vehicles, delayQueueEntry, markQueueNoShow } = useAppData();
-  const myEntry = myQueueEntry;
-  const myQueueEntries = queueDisplay.filter((entry) => entry.user_id === currentUser?.uid);
+  const { myQueueEntry, queueDisplay, currentUser, vehicles, bookingsDisplay, delayQueueEntry, markQueueNoShow } = useAppData();
+  const currentUid = currentUser?.uid || currentUser?.id;
+  const myQueueEntries = queueDisplay.filter((entry) => entry.user_id === currentUid);
+  const myEntry =
+    myQueueEntries
+      .filter((entry) => entry.status === "waiting" || entry.status === "called")
+      .sort((a, b) => Number(a.queue_position || 999) - Number(b.queue_position || 999))[0] ||
+    myQueueEntry;
   const [actionError, setActionError] = useState("");
 
   const vehicleNameById = (vehicles || []).reduce((acc, vehicle) => {
@@ -20,6 +25,23 @@ export default function Queue() {
       entry.vehicle_id ||
       "-"
     );
+  };
+
+  const resolveBatteryLevel = (entry) => {
+    if (entry?.battery_level !== null && entry?.battery_level !== undefined && entry?.battery_level !== "") {
+      return Number(entry.battery_level);
+    }
+
+    const bookingMatch = (bookingsDisplay || []).find((booking) => booking.booking_id === entry?.booking_id);
+    if (
+      bookingMatch?.battery_level !== null &&
+      bookingMatch?.battery_level !== undefined &&
+      bookingMatch?.battery_level !== ""
+    ) {
+      return Number(bookingMatch.battery_level);
+    }
+
+    return null;
   };
 
   const runAction = async (action) => {
@@ -54,7 +76,7 @@ export default function Queue() {
               <div className="text-muted" style={{ marginBottom: 8 }}>
                 {getVehicleLabel(myEntry)} · {myEntry.port_name} · Est. wait {myEntry.estimated_wait} min
               </div>
-              {myEntry.battery_level != null ? <Battery level={myEntry.battery_level} /> : null}
+              {resolveBatteryLevel(myEntry) != null ? <Battery level={resolveBatteryLevel(myEntry)} /> : null}
             </div>
             <div className="flex gap-8">
               {myEntry.status === "waiting" ? (
@@ -101,7 +123,7 @@ export default function Queue() {
                   <td>{entry.queue_position}</td>
                   <td>{getVehicleLabel(entry)}</td>
                   <td>{entry.port_name}</td>
-                  <td>{entry.battery_level != null ? `${entry.battery_level}%` : "-"}</td>
+                  <td>{resolveBatteryLevel(entry) != null ? `${resolveBatteryLevel(entry)}%` : "-"}</td>
                   <td>{entry.entry_type.replace("_", " ")}</td>
                   <td>{entry.estimated_wait > 0 ? `~${entry.estimated_wait}m` : "-"}</td>
                   <td>
