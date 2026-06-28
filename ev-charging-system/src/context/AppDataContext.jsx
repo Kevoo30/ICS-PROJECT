@@ -351,6 +351,7 @@ export function AppDataProvider({ children }) {
           ? [vehicle.make, vehicle.model].filter(Boolean).join(" ").trim() || "EV Model"
           : "EV Model";
         const numberPlate = vehicle?.plate || `EV-${Math.floor(1000 + Math.random() * 9000)}`;
+        const connectorType = vehicle?.connectorType || "Type 2";
         const backendUser = await registerUser({
           fullName: name,
           email,
@@ -359,7 +360,7 @@ export function AppDataProvider({ children }) {
           role,
           vehicleModel,
           numberPlate,
-          connectorType: "Type 2",
+          connectorType,
         });
         return {
           ok: true,
@@ -382,7 +383,7 @@ export function AppDataProvider({ children }) {
         throw new Error("Please log in first.");
       }
 
-      const stationId = payload?.port_id || payload?.stationId;
+      const requestedPortId = payload?.port_id || payload?.stationId;
       const selectedVehicleId = payload?.vehicle_id || payload?.vehicleId;
       const isPriority =
         typeof payload?.is_priority === "boolean"
@@ -392,14 +393,38 @@ export function AppDataProvider({ children }) {
         payload?.battery_level ?? payload?.batteryLevel ?? payload?.batteryPercentage;
       const preferredTime = payload?.preferred_time ?? payload?.preferredTime ?? null;
 
-      const selectedPort = ports.find((port) => port.port_id === stationId);
-      if (!selectedPort) {
-        throw new Error("Select a valid charging port.");
+      const availablePorts = ports.filter((port) => port.status !== "offline");
+      if (!availablePorts.length) {
+        throw new Error("No charging ports are currently available.");
       }
 
-      const vehicleId =
-        selectedVehicleId ||
-        (await ensureDefaultVehicle(currentUid, selectedPort.connector_type || "Type 2"));
+      let vehicleId = selectedVehicleId || null;
+      if (!vehicleId) {
+        vehicleId = await ensureDefaultVehicle(currentUid, "Type 2");
+      }
+
+      let vehicle = vehicles.find((item) => item.vehicle_id === vehicleId) || null;
+      if (!vehicle) {
+        const latestVehicles = await apiRequest(`/auth/user/${currentUid}/vehicles`).catch(() => []);
+        vehicle = (Array.isArray(latestVehicles) ? latestVehicles : []).find((item) => item.vehicle_id === vehicleId) || null;
+      }
+
+      const preferredConnectorType = vehicle?.connector_type || "";
+      const connectorMatchedPorts = preferredConnectorType
+        ? availablePorts.filter(
+            (port) => String(port.connector_type || "").toLowerCase() === String(preferredConnectorType).toLowerCase(),
+          )
+        : [];
+
+      const selectedPort = requestedPortId
+        ? availablePorts.find((port) => port.port_id === requestedPortId)
+        : connectorMatchedPorts[0] || availablePorts[0];
+
+      if (!selectedPort?.port_id) {
+        throw new Error("No compatible charging port found for this vehicle.");
+      }
+
+      const portId = selectedPort.port_id;
 
       const batteryLevel =
         batteryLevelValue === null || batteryLevelValue === undefined || batteryLevelValue === ""
@@ -415,7 +440,7 @@ export function AppDataProvider({ children }) {
         body: JSON.stringify({
           user_id: currentUid,
           vehicle_id: vehicleId,
-          port_id: stationId,
+          port_id: portId,
           is_priority: isPriority,
           battery_level: isPriority ? batteryLevel : null,
           preferred_time: preferredTime,
@@ -433,7 +458,7 @@ export function AppDataProvider({ children }) {
           user_id: currentUid,
           vehicle_id: vehicleId,
           booking_id: bookingId,
-          port_id: stationId,
+          port_id: portId,
           entry_type: "booking",
           is_priority: isPriority,
           battery_level: isPriority ? batteryLevel : null,
@@ -444,7 +469,7 @@ export function AppDataProvider({ children }) {
       addNotification("Booking created and queued successfully.", "success");
       await loadDashboardData(currentUser);
     },
-    [addNotification, currentUser, ensureDefaultVehicle, loadDashboardData, ports],
+    [addNotification, currentUser, ensureDefaultVehicle, loadDashboardData, ports, vehicles],
   );
 
   const startCharging = useCallback(

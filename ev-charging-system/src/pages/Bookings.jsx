@@ -1,6 +1,57 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useRef, useState } from "react";
 import { Badge, Btn } from "../components/ui";
 import { useAppData } from "../context/AppDataContext";
+
+function parseBookingDateTime(dateText, timeText) {
+  const rawDate = String(dateText || "").trim();
+  const rawTime = String(timeText || "").trim().toLowerCase();
+
+  const dmyDate = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(rawDate);
+  const hhmm24 = /^([01]?\d|2[0-3])(?::([0-5]\d))?$/.exec(rawTime);
+  const hhmm12 = /^(\d{1,2})(?::([0-5]\d))?\s*(am|pm)$/.exec(rawTime);
+
+  if (!dmyDate || (!hhmm24 && !hhmm12)) {
+    return null;
+  }
+
+  const day = Number(dmyDate[1]);
+  const month = Number(dmyDate[2]);
+  const year = Number(dmyDate[3]);
+  let hours = 0;
+  let minutes = 0;
+
+  if (hhmm12) {
+    let parsedHour = Number(hhmm12[1]);
+    if (parsedHour < 1 || parsedHour > 12) {
+      return null;
+    }
+    minutes = Number(hhmm12[2] || "0");
+    if (hhmm12[3] === "am") {
+      hours = parsedHour === 12 ? 0 : parsedHour;
+    } else {
+      hours = parsedHour === 12 ? 12 : parsedHour + 12;
+    }
+  } else if (hhmm24) {
+    hours = Number(hhmm24[1]);
+    minutes = Number(hhmm24[2] || "0");
+  }
+
+  const composed = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  if (
+    composed.getFullYear() !== year ||
+    composed.getMonth() !== month - 1 ||
+    composed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return composed;
+}
+
+function formatDateTimeForBooking(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 function formatSlot(start, end, preferredTime) {
   if (!start) return preferredTime || "TBD";
@@ -17,9 +68,9 @@ export default function Bookings() {
   const bookingSubmitLockRef = useRef(false);
   const [bookingForm, setBookingForm] = useState({
     vehicle_id: "",
-    port_id: "",
+    booking_date: "",
+    booking_time: "",
     battery_level: "20",
-    preferred_time: "",
   });
 
   const runAction = async (action) => {
@@ -46,11 +97,7 @@ export default function Bookings() {
         throw new Error("Please select a vehicle name.");
       }
 
-      if (!bookingForm.port_id) {
-        throw new Error("Please select a port.");
-      }
-
-      if (!bookingForm.preferred_time) {
+      if (!bookingForm.booking_date || !bookingForm.booking_time) {
         throw new Error("Please select your preferred charging time.");
       }
 
@@ -59,51 +106,23 @@ export default function Bookings() {
         throw new Error("Battery level must be between 1 and 100.");
       }
 
+      const bookingDateTime = parseBookingDateTime(bookingForm.booking_date, bookingForm.booking_time);
+      if (!bookingDateTime || Number.isNaN(bookingDateTime.getTime()) || bookingDateTime.getTime() <= Date.now()) {
+        throw new Error("Use Date DD/MM/YYYY and a valid time (24h or 12h), then pick a future time.");
+      }
+
       await createBooking({
         vehicle_id: bookingForm.vehicle_id,
-        port_id: bookingForm.port_id,
         battery_level: battery,
-        preferred_time: bookingForm.preferred_time,
+        preferred_time: formatDateTimeForBooking(bookingDateTime),
       });
       setShowBookingForm(false);
-      setBookingForm({ vehicle_id: "", port_id: "", battery_level: "20", preferred_time: "" });
+      setBookingForm({ vehicle_id: "", booking_date: "", booking_time: "", battery_level: "20" });
     } finally {
       bookingSubmitLockRef.current = false;
       setIsSubmittingBooking(false);
     }
   };
-
-  const availablePorts = ports.filter((item) => item.status !== "offline");
-  const selectedVehicle = useMemo(
-    () => vehicles.find((vehicle) => vehicle.vehicle_id === bookingForm.vehicle_id) || null,
-    [bookingForm.vehicle_id, vehicles],
-  );
-  const selectedConnectorType = selectedVehicle?.connector_type || "";
-  const compatiblePorts = useMemo(() => {
-    if (!selectedConnectorType) {
-      return availablePorts;
-    }
-    const exactMatches = availablePorts.filter(
-      (port) => String(port.connector_type || "").toLowerCase() === String(selectedConnectorType).toLowerCase(),
-    );
-    return exactMatches.length > 0 ? exactMatches : availablePorts;
-  }, [availablePorts, selectedConnectorType]);
-
-  useEffect(() => {
-    if (!bookingForm.vehicle_id) {
-      return;
-    }
-
-    if (!compatiblePorts.length) {
-      setBookingForm((current) => ({ ...current, port_id: "" }));
-      return;
-    }
-
-    const isSelectedPortCompatible = compatiblePorts.some((port) => port.port_id === bookingForm.port_id);
-    if (!isSelectedPortCompatible) {
-      setBookingForm((current) => ({ ...current, port_id: compatiblePorts[0].port_id }));
-    }
-  }, [bookingForm.port_id, bookingForm.vehicle_id, compatiblePorts]);
 
   return (
     <div className="page animate-in">
@@ -121,9 +140,14 @@ export default function Bookings() {
         <div className="card">
           <div className="card-header">
             <div className="card-title">Create booking</div>
-            <div className="text-muted">Choose your vehicle name, port type, charging time and battery level</div>
+            <div className="text-muted">Choose your vehicle, date, time and battery level</div>
           </div>
           <form onSubmit={(event) => runAction(() => handleCreateBooking(event))}>
+            {vehicles.length === 0 ? (
+              <div className="text-muted" style={{ marginBottom: 8 }}>
+                No vehicles found. Add one first in My Vehicles.
+              </div>
+            ) : null}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <div>
                 <div className="text-muted" style={{ marginBottom: 4 }}>Vehicle name</div>
@@ -146,52 +170,22 @@ export default function Bookings() {
                   <option value="">Select vehicle name</option>
                   {vehicles.map((vehicle) => (
                     <option key={vehicle.vehicle_id} value={vehicle.vehicle_id}>
-                      {vehicle.vehicle_model}
+                      {vehicle.vehicle_model || vehicle.number_plate || vehicle.vehicle_id}
                     </option>
                   ))}
                 </select>
               </div>
 
               <div>
-                <div className="text-muted" style={{ marginBottom: 4 }}>Port type</div>
-                {selectedConnectorType ? (
-                  <div className="text-muted" style={{ marginBottom: 4 }}>
-                    Auto-filled from vehicle connector: <strong>{selectedConnectorType}</strong>
-                  </div>
-                ) : null}
-                <select
-                  value={bookingForm.port_id}
-                  onChange={(event) =>
-                    setBookingForm((current) => ({ ...current, port_id: event.target.value }))
-                  }
-                  disabled={isSubmittingBooking}
-                  style={{
-                    width: "100%",
-                    padding: "8px",
-                    borderRadius: 6,
-                    border: "1px solid var(--border)",
-                    background: "var(--bg-base)",
-                    color: "var(--text-primary)",
-                  }}
-                  required
-                >
-                  <option value="">Select port type</option>
-                  {compatiblePorts.map((port) => (
-                    <option key={port.port_id} value={port.port_id}>
-                      {port.connector_type} ({port.port_name})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <div className="text-muted" style={{ marginBottom: 4 }}>Charging time</div>
+                <div className="text-muted" style={{ marginBottom: 4 }}>Date</div>
                 <input
-                  type="time"
-                  value={bookingForm.preferred_time}
+                  type="text"
+                  placeholder="DD/MM/YYYY"
+                  value={bookingForm.booking_date}
                   onChange={(event) =>
-                    setBookingForm((current) => ({ ...current, preferred_time: event.target.value }))
+                    setBookingForm((current) => ({ ...current, booking_date: event.target.value }))
                   }
+                  inputMode="text"
                   disabled={isSubmittingBooking}
                   style={{
                     width: "100%",
@@ -203,6 +197,31 @@ export default function Bookings() {
                   }}
                   required
                 />
+                <div className="text-muted" style={{ marginTop: 4 }}>Format: DD/MM/YYYY</div>
+              </div>
+
+              <div>
+                <div className="text-muted" style={{ marginBottom: 4 }}>Time</div>
+                <input
+                  type="text"
+                  placeholder="HH:MM or 3pm"
+                  value={bookingForm.booking_time}
+                  onChange={(event) =>
+                    setBookingForm((current) => ({ ...current, booking_time: event.target.value }))
+                  }
+                  inputMode="text"
+                  disabled={isSubmittingBooking}
+                  style={{
+                    width: "100%",
+                    padding: "8px",
+                    borderRadius: 6,
+                    border: "1px solid var(--border)",
+                    background: "var(--bg-base)",
+                    color: "var(--text-primary)",
+                  }}
+                  required
+                />
+                <div className="text-muted" style={{ marginTop: 4 }}>Format: HH:MM (24-hour) or 3pm / 3:15 PM</div>
               </div>
 
               <div>

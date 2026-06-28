@@ -20,6 +20,7 @@ export default function Layout({ children }) {
     { to: "/queue", label: "⚡ Charging Queue" },
     { to: "/vehicles", label: "🚗 My Vehicles" },
     { to: "/history", label: "📋 History" },
+    { to: "/profile", label: "👤 Profile" },
   ];
 
   const operatorLinks = [

@@ -10,12 +10,17 @@ export default function Register() {
     name: "", email: "", password: "", confirm: "",
   });
   const [addVehicle, setAddVehicle] = useState(false);
-  const [vehicle, setVehicle] = useState({ make: "", model: "", plate: "", batteryCapacity: "" });
+  const [vehicle, setVehicle] = useState({ make: "", model: "", plate: "", connectorType: "Type 2", batteryCapacity: "" });
   const [error, setError] = useState("");
 
   async function handleSubmit(e) {
     e.preventDefault();
     if (form.password !== form.confirm) return setError("Passwords do not match");
+    if (role === "driver" && addVehicle) {
+      if (!vehicle.make.trim() || !vehicle.model.trim() || !vehicle.plate.trim() || !vehicle.connectorType) {
+        return setError("Vehicle make, model, plate and connector type are required.");
+      }
+    }
     const result = await registerUser({
       name: form.name,
       email: form.email,
@@ -114,6 +119,19 @@ export default function Register() {
                 <label className="form-label">Battery Capacity (kWh)</label>
                 <input className="form-input" type="number" value={vehicle.batteryCapacity}
                   onChange={e => setVehicle(p => ({ ...p, batteryCapacity: e.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label className="form-label">Connector Type</label>
+                <select
+                  className="form-select"
+                  value={vehicle.connectorType}
+                  onChange={e => setVehicle(p => ({ ...p, connectorType: e.target.value }))}
+                >
+                  <option value="Type 1">Type 1</option>
+                  <option value="Type 2">Type 2</option>
+                  <option value="CCS">CCS</option>
+                  <option value="CHAdeMO">CHAdeMO</option>
+                </select>
               </div>
             </div>
           )}

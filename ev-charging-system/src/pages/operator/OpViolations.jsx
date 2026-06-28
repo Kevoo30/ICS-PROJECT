@@ -75,9 +75,6 @@ export default function OpViolations() {
                 <Badge status="pending" label="Pending" />
               </div>
               <div className="text-muted" style={{ fontSize: 12, marginBottom: 2 }}>
-                Violation ID: {v.violation_id}
-              </div>
-              <div className="text-muted" style={{ fontSize: 12, marginBottom: 2 }}>
                 Port: {v.port_name || v.port_id || "-"}
               </div>
               <div className="text-muted" style={{ fontSize: 12, marginBottom: 6 }}>
@@ -113,7 +110,7 @@ export default function OpViolations() {
           <table>
             <thead>
               <tr>
-                {["ID", "User", "Reason", "Issued by", "Date", ""].map((h) => (
+                {["User", "Reason", "Issued by", "Date", ""].map((h) => (
                   <th key={h}>{h}</th>
                 ))}
               </tr>
@@ -121,7 +118,6 @@ export default function OpViolations() {
             <tbody>
               {visibleViolations.map((v) => (
                 <tr key={v.violation_id}>
-                  <td className="text-muted">{v.violation_id}</td>
                   <td>{v.user_name}</td>
                   <td>{v.reason}</td>
                   <td><Badge status={v.issued_by} label={v.issued_by} /></td>

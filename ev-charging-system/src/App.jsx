@@ -13,6 +13,7 @@ import DriverDashboard from "./pages/driver/DriverDashboard";
 import Queue from "./pages/driver/Queue";
 import Vehicles from "./pages/driver/Vehicles";
 import History from "./pages/driver/History";
+import Profile from "./pages/driver/Profile";
 
 // Operator pages
 import OperatorDashboard from "./pages/operator/OperatorDashboard";
@@ -46,6 +47,7 @@ function AppRoutes() {
       <Route path="/queue" element={<ProtectedRoute role="driver"><Layout><Queue /></Layout></ProtectedRoute>} />
       <Route path="/vehicles" element={<ProtectedRoute role="driver"><Layout><Vehicles /></Layout></ProtectedRoute>} />
       <Route path="/history" element={<ProtectedRoute role="driver"><Layout><History /></Layout></ProtectedRoute>} />
+      <Route path="/profile" element={<ProtectedRoute role="driver"><Layout><Profile /></Layout></ProtectedRoute>} />
 
       {/* Operator routes */}
       <Route path="/operator/dashboard" element={<ProtectedRoute role="operator"><Layout><OperatorDashboard /></Layout></ProtectedRoute>} />

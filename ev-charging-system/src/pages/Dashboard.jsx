@@ -1,12 +1,62 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
 import "../styles/dashboard.css";
 import { useAppData } from "../context/AppDataContext";
+
+function parseBookingDateTime(dateText, timeText) {
+  const rawDate = String(dateText || "").trim();
+  const rawTime = String(timeText || "").trim().toLowerCase();
+
+  const dmyDate = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(rawDate);
+  const hhmm24 = /^([01]?\d|2[0-3])(?::([0-5]\d))?$/.exec(rawTime);
+  const hhmm12 = /^(\d{1,2})(?::([0-5]\d))?\s*(am|pm)$/.exec(rawTime);
+
+  if (!dmyDate || (!hhmm24 && !hhmm12)) {
+    return null;
+  }
+
+  const day = Number(dmyDate[1]);
+  const month = Number(dmyDate[2]);
+  const year = Number(dmyDate[3]);
+  let hours = 0;
+  let minutes = 0;
+
+  if (hhmm12) {
+    let parsedHour = Number(hhmm12[1]);
+    if (parsedHour < 1 || parsedHour > 12) {
+      return null;
+    }
+    minutes = Number(hhmm12[2] || "0");
+    if (hhmm12[3] === "am") {
+      hours = parsedHour === 12 ? 0 : parsedHour;
+    } else {
+      hours = parsedHour === 12 ? 12 : parsedHour + 12;
+    }
+  } else if (hhmm24) {
+    hours = Number(hhmm24[1]);
+    minutes = Number(hhmm24[2] || "0");
+  }
+
+  const composed = new Date(year, month - 1, day, hours, minutes, 0, 0);
+  if (
+    composed.getFullYear() !== year ||
+    composed.getMonth() !== month - 1 ||
+    composed.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return composed;
+}
+
+function formatDateTimeForBooking(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
 
 function Dashboard() {
   const {
     currentDriver,
-    stations,
+    vehicles,
     createBooking,
     driverStats,
     driverRecentSessions,
@@ -15,22 +65,21 @@ function Dashboard() {
 
   const [showBookingForm, setShowBookingForm] = useState(false);
   const [bookingForm, setBookingForm] = useState({
-    stationId: stations[0]?.id || "",
-    port: "Port 01",
-    date: "",
-    timeSlot: "14:00 - 15:00",
+    vehicleId: "",
+    bookingDate: "",
+    bookingTime: "",
     batteryPercentage: "20",
   });
   const [bookingError, setBookingError] = useState("");
 
   useEffect(() => {
-    if (!bookingForm.stationId && stations[0]?.id) {
+    if (!bookingForm.vehicleId && vehicles[0]?.vehicle_id) {
       setBookingForm((current) => ({
         ...current,
-        stationId: stations[0].id,
+        vehicleId: vehicles[0].vehicle_id,
       }));
     }
-  }, [bookingForm.stationId, stations]);
+  }, [bookingForm.vehicleId, vehicles]);
 
   const handleBookingField = (event) => {
     const { name, value } = event.target;
@@ -44,8 +93,8 @@ function Dashboard() {
     event.preventDefault();
     const battery = Number(bookingForm.batteryPercentage);
 
-    if (!bookingForm.stationId || !bookingForm.date || !bookingForm.timeSlot) {
-      setBookingError("Please fill station, date, and time slot.");
+    if (!bookingForm.vehicleId || !bookingForm.bookingDate || !bookingForm.bookingTime) {
+      setBookingError("Please choose vehicle, date, and time.");
       return;
     }
 
@@ -54,18 +103,26 @@ function Dashboard() {
       return;
     }
 
+    const bookingDateTime = parseBookingDateTime(bookingForm.bookingDate, bookingForm.bookingTime);
+    if (!bookingDateTime || Number.isNaN(bookingDateTime.getTime()) || bookingDateTime.getTime() <= Date.now()) {
+      setBookingError("Use Date DD/MM/YYYY and a valid time (24h or 12h), then pick a future time.");
+      return;
+    }
+
     setBookingError("");
 
     try {
       await createBooking({
-        stationId: bookingForm.stationId,
+        vehicleId: bookingForm.vehicleId,
+        preferredTime: formatDateTimeForBooking(bookingDateTime),
         batteryPercentage: battery,
       });
 
       setShowBookingForm(false);
       setBookingForm((current) => ({
         ...current,
-        date: "",
+        bookingDate: "",
+        bookingTime: "",
         batteryPercentage: "20",
       }));
     } catch (submitError) {
@@ -96,48 +153,52 @@ function Dashboard() {
             <h2>Create New Booking</h2>
           </div>
           <form className="booking-form" onSubmit={handleCreateBooking}>
-            <label htmlFor="booking-station">Station</label>
+            {vehicles.length === 0 ? (
+              <p className="booking-error">No vehicle found. Add a vehicle first in My Vehicles.</p>
+            ) : null}
+
+            <label htmlFor="booking-vehicle">Vehicle</label>
             <select
-              id="booking-station"
-              name="stationId"
-              value={bookingForm.stationId}
+              id="booking-vehicle"
+              name="vehicleId"
+              value={bookingForm.vehicleId}
               onChange={handleBookingField}
+              disabled={vehicles.length === 0}
+              required
             >
-              {stations.map((station) => (
-                <option key={station.id} value={station.id}>
-                  {station.name}
+              <option value="">Select vehicle</option>
+              {vehicles.map((vehicle) => (
+                <option key={vehicle.vehicle_id} value={vehicle.vehicle_id}>
+                  {vehicle.vehicle_model || vehicle.number_plate || vehicle.vehicle_id}
                 </option>
               ))}
-            </select>
-
-            <label htmlFor="booking-port">Port</label>
-            <select id="booking-port" name="port" value={bookingForm.port} onChange={handleBookingField}>
-              <option value="Port 01">Port 01</option>
-              <option value="Port 02">Port 02</option>
-              <option value="Port 03">Port 03</option>
-              <option value="Port 04">Port 04</option>
-              <option value="Port 05">Port 05</option>
             </select>
 
             <label htmlFor="booking-date">Date</label>
             <input
               id="booking-date"
-              name="date"
-              type="date"
-              value={bookingForm.date}
+              name="bookingDate"
+              type="text"
+              placeholder="DD/MM/YYYY"
+              value={bookingForm.bookingDate}
               onChange={handleBookingField}
+              inputMode="text"
               required
             />
+            <div className="text-muted" style={{ marginTop: -6, marginBottom: 4 }}>Format: DD/MM/YYYY</div>
 
-            <label htmlFor="booking-time">Time Slot</label>
-            <select id="booking-time" name="timeSlot" value={bookingForm.timeSlot} onChange={handleBookingField}>
-              <option value="08:00 - 09:00">08:00 - 09:00</option>
-              <option value="10:00 - 11:00">10:00 - 11:00</option>
-              <option value="12:00 - 13:00">12:00 - 13:00</option>
-              <option value="14:00 - 15:00">14:00 - 15:00</option>
-              <option value="16:00 - 17:00">16:00 - 17:00</option>
-              <option value="18:00 - 19:00">18:00 - 19:00</option>
-            </select>
+            <label htmlFor="booking-time">Time</label>
+            <input
+              id="booking-time"
+              name="bookingTime"
+              type="text"
+              placeholder="HH:MM or 3pm"
+              value={bookingForm.bookingTime}
+              onChange={handleBookingField}
+              inputMode="text"
+              required
+            />
+            <div className="text-muted" style={{ marginTop: -6, marginBottom: 4 }}>Format: HH:MM (24-hour) or 3pm / 3:15 PM</div>
 
             <label htmlFor="booking-battery">Battery Percentage</label>
             <input
@@ -155,7 +216,7 @@ function Dashboard() {
             {bookingError ? <p className="booking-error">{bookingError}</p> : null}
 
             <div className="booking-actions">
-              <button type="submit" className="primary-btn">
+              <button type="submit" className="primary-btn" disabled={vehicles.length === 0}>
                 Save Booking
               </button>
               <button type="button" className="secondary-btn" onClick={() => setShowBookingForm(false)}>

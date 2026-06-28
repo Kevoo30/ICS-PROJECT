@@ -350,3 +350,66 @@ th {
     grid-template-columns: 1fr;
   }
 }
+
+body.light-mode .dashboard-shell {
+  background:
+    radial-gradient(circle at 10% -20%, rgba(37, 99, 235, 0.1) 0%, transparent 42%),
+    radial-gradient(circle at 90% -10%, rgba(14, 116, 144, 0.1) 0%, transparent 38%),
+    var(--bg-base);
+  color: var(--text-primary);
+}
+
+body.light-mode .dashboard-kicker {
+  color: var(--accent);
+}
+
+body.light-mode .dashboard-header h1,
+body.light-mode .panel-heading h2,
+body.light-mode .station-name,
+body.light-mode .stat-card strong {
+  color: var(--text-primary);
+}
+
+body.light-mode .dashboard-subtitle,
+body.light-mode .booking-form label,
+body.light-mode .stat-card p,
+body.light-mode th,
+body.light-mode .station-distance {
+  color: var(--text-secondary);
+}
+
+body.light-mode .booking-panel,
+body.light-mode .stat-card,
+body.light-mode .panel,
+body.light-mode .station-list li {
+  background: var(--bg-card);
+  border-color: var(--border);
+}
+
+body.light-mode .booking-form select,
+body.light-mode .booking-form input,
+body.light-mode .secondary-btn {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  border-color: var(--border);
+}
+
+body.light-mode th,
+body.light-mode td {
+  border-bottom-color: var(--border);
+}
+
+body.light-mode .status-completed {
+  background: rgba(22, 163, 74, 0.14);
+  color: var(--success);
+}
+
+body.light-mode .status-active {
+  background: rgba(37, 99, 235, 0.14);
+  color: var(--accent);
+}
+
+body.light-mode .station-list span {
+  color: var(--success);
+  background: rgba(22, 163, 74, 0.14);
+}
