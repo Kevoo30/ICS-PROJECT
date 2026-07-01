@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Badge, Btn } from "../../components/ui";
 import { useAppData } from "../../context/AppDataContext";
 
@@ -13,6 +13,36 @@ export default function OpViolations() {
     currentUser,
   } = useAppData();
   const [actionError, setActionError] = useState("");
+  const [showIssueForm, setShowIssueForm] = useState(false);
+  const [issueUserName, setIssueUserName] = useState("");
+  const [issueReason, setIssueReason] = useState("No-show after being called to port");
+  const [issuing, setIssuing] = useState(false);
+
+  const userOptions = useMemo(() => {
+    const map = new Map();
+
+    (queueDisplay || []).forEach((item) => {
+      const key = String(item.user_id || "").trim();
+      if (!key) return;
+      map.set(key, {
+        userId: key,
+        userName: String(item.user_name || item.user_id || "").trim(),
+      });
+    });
+
+    (violations || []).forEach((item) => {
+      const key = String(item.user_id || "").trim();
+      if (!key) return;
+      if (!map.has(key)) {
+        map.set(key, {
+          userId: key,
+          userName: String(item.user_name || item.user_id || "").trim(),
+        });
+      }
+    });
+
+    return Array.from(map.values());
+  }, [queueDisplay, violations]);
 
   const runAction = async (action) => {
     setActionError("");
@@ -24,12 +54,35 @@ export default function OpViolations() {
   };
 
   const handleIssueViolation = async () => {
-    const defaultUser = queueDisplay[0]?.user_id || "";
-    const userId = window.prompt("User ID to issue violation for:", defaultUser);
-    if (!userId) return;
-    const reason = window.prompt("Reason for violation:", "No-show after being called to port");
-    if (!reason) return;
-    await issueViolation({ userId, reason, issuedBy: "operator" });
+    const typedName = String(issueUserName || "").trim();
+    const reason = String(issueReason || "").trim();
+    if (!typedName || !reason) {
+      setActionError("User name and reason are required.");
+      return;
+    }
+
+    const normalized = typedName.toLowerCase();
+    const matched = userOptions.filter((option) => option.userName.toLowerCase() === normalized);
+    if (matched.length === 0) {
+      setActionError("User name not found. Use the exact user name.");
+      return;
+    }
+    if (matched.length > 1) {
+      setActionError("Multiple users have this name. Please use a more specific name.");
+      return;
+    }
+
+    const userId = matched[0].userId;
+
+    setIssuing(true);
+    try {
+      await issueViolation({ userId, reason, issuedBy: "operator" });
+      setShowIssueForm(false);
+      setIssueUserName("");
+      setIssueReason("No-show after being called to port");
+    } finally {
+      setIssuing(false);
+    }
   };
 
   const handleReview = async (violationId, action) => {
@@ -52,8 +105,51 @@ export default function OpViolations() {
       ) : null}
 
       <div style={{ display: "flex", justifyContent: "flex-end" }}>
-        <Btn variant="primary" onClick={() => runAction(handleIssueViolation)}>+ Issue violation</Btn>
+        <Btn
+          variant="primary"
+          onClick={() => {
+            if (!showIssueForm) {
+              setIssueUserName(queueDisplay[0]?.user_name || "");
+            }
+            setShowIssueForm((current) => !current);
+          }}
+        >
+          {showIssueForm ? "Close" : "+ Issue Violation"}
+        </Btn>
       </div>
+
+      {showIssueForm ? (
+        <div className="card">
+          <div className="card-header">
+            <div className="card-title">Issue Violation</div>
+          </div>
+          <div className="grid-2">
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">User Name</label>
+              <input
+                className="form-input"
+                value={issueUserName}
+                onChange={(event) => setIssueUserName(event.target.value)}
+                placeholder="Enter exact user name"
+              />
+            </div>
+            <div className="form-group" style={{ marginBottom: 0 }}>
+              <label className="form-label">Reason</label>
+              <input
+                className="form-input"
+                value={issueReason}
+                onChange={(event) => setIssueReason(event.target.value)}
+                placeholder="Enter reason"
+              />
+            </div>
+          </div>
+          <div style={{ marginTop: 12, display: "flex", justifyContent: "flex-end" }}>
+            <Btn variant="danger" onClick={() => runAction(handleIssueViolation)} disabled={issuing}>
+              {issuing ? "Issuing..." : "Issue Violation"}
+            </Btn>
+          </div>
+        </div>
+      ) : null}
 
       <div className="card">
         <div className="card-header">
@@ -137,9 +233,10 @@ export default function OpViolations() {
           <div className="card-title">About violations</div>
         </div>
         <p className="text-muted" style={{ lineHeight: 1.6 }}>
-          Violations are issued when a driver misses their called slot (no-show), abuses queue
-          position, or repeatedly delays. The is_deleted flag is used as a soft ban
-          lift - setting it to true lifts the restriction without deleting the record.
+          A violation may be issued when a driver misses a called slot (no-show),
+          manipulates queue position, or repeatedly delays charging. Ban lifts are
+          handled in a way that removes restrictions while keeping a record of
+          what happened for future review.
         </p>
       </div>
     </div>

@@ -6,7 +6,7 @@ import { useAppData } from "../../context/AppDataContext";
 const statusIcon = { available: "🟢", occupied: "🟠", offline: "⚫" };
 
 export default function OpPorts() {
-  const { ports, updatePortStatus } = useAppData();
+  const { ports, updatePortStatus, sessionsDisplay, currentUser } = useAppData();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlStatus = (searchParams.get("status") || "all").toLowerCase();
   const [statusFilter, setStatusFilter] = useState(
@@ -35,10 +35,29 @@ export default function OpPorts() {
     return ports.filter((port) => port.status === statusFilter);
   }, [ports, statusFilter]);
 
+  const sessionByPortId = useMemo(() => {
+    const map = {};
+    (sessionsDisplay || []).forEach((session) => {
+      if (session?.port_id) {
+        map[session.port_id] = session;
+      }
+    });
+    return map;
+  }, [sessionsDisplay]);
+
   const selectedPort = useMemo(
     () => ports.find((port) => port.port_id === selectedPortId) || null,
     [ports, selectedPortId],
   );
+
+  const selectedPortSession = useMemo(() => {
+    if (!selectedPort) return null;
+    return (
+      (sessionsDisplay || []).find((session) => session?.session_id === selectedPort.current_session_id) ||
+      sessionByPortId[selectedPort.port_id] ||
+      null
+    );
+  }, [selectedPort, sessionsDisplay, sessionByPortId]);
 
   const applyFilter = (nextFilter) => {
     setStatusFilter(nextFilter);
@@ -85,6 +104,13 @@ export default function OpPorts() {
 
       <div className="ports-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(240px, 1fr))", gap: 16, alignItems: "stretch" }}>
         {visiblePorts.map((port) => (
+          (() => {
+            const activeSession =
+              (sessionsDisplay || []).find((session) => session?.session_id === port.current_session_id) ||
+              sessionByPortId[port.port_id] ||
+              null;
+
+            return (
           <div
             key={port.port_id}
             className="card"
@@ -101,8 +127,13 @@ export default function OpPorts() {
                 {port.connector_type}
               </div>
               <Badge status={port.status} />
-              <div style={{ fontSize: 10, color: "#888", marginTop: 4, minHeight: 16 }}>
-                {port.current_session_id || "-"}
+              {port.status === "occupied" ? (
+                <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 6 }}>
+                  Charging user: {activeSession?.user_name || "Unknown user"}
+                </div>
+              ) : null}
+              <div style={{ fontSize: 11, color: "var(--text-secondary)", marginTop: 4 }}>
+                Operator: {currentUser?.name || "-"}
               </div>
             </div>
 
@@ -136,6 +167,8 @@ export default function OpPorts() {
               )}
             </div>
           </div>
+            );
+          })()
         ))}
 
         {visiblePorts.length === 0 ? (
@@ -167,8 +200,8 @@ export default function OpPorts() {
               <Badge status={selectedPort.status} />
             </div>
             <div>
-              <div className="text-muted">Current Session</div>
-              <div>{selectedPort.current_session_id || "-"}</div>
+              <div className="text-muted">Charging User</div>
+              <div>{selectedPortSession?.user_name || "-"}</div>
             </div>
           </div>
         </div>
