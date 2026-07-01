@@ -5,29 +5,44 @@ import { useAppData } from "../../context/AppDataContext";
 
 export default function OpOverview() {
   const navigate = useNavigate();
-  const { ports, sessionsDisplay, queueDisplay, violations } = useAppData();
+  const { ports, sessionsDisplay, queueDisplay, violations, activeSessions } = useAppData();
 
   const occupied = ports.filter((p) => p.status === "occupied").length;
   const available = ports.filter((p) => p.status === "available").length;
   const offline = ports.filter((p) => p.status === "offline").length;
+  const todayLabel = new Date().toISOString().slice(0, 10);
+  const todaysSessions = activeSessions.filter((session) => session.date === todayLabel).length;
+
+  const metricCards = [
+    { label: "Total ports", value: ports.length, to: "/operator/stations" },
+    { label: "Occupied", value: occupied, valueColor: "#854F0B", to: "/operator/stations?status=occupied" },
+    { label: "Available", value: available, valueColor: "#3B6D11", to: "/operator/stations?status=available" },
+    { label: "Offline", value: offline, valueColor: "#A32D2D", to: "/operator/stations?status=offline" },
+    { label: "Queue length", value: queueDisplay.length, to: "/operator/queue" },
+    { label: "Active sessions", value: sessionsDisplay.length, to: "/operator/stations?status=occupied" },
+    { label: "Today's sessions", value: todaysSessions, to: "/operator/stations" },
+    { label: "Violations", value: violations.length, valueColor: "#A32D2D", to: "/operator/violations" },
+  ];
 
   return (
     <div className="page animate-in">
       <div className="stat-grid">
-        <StatCard label="Total ports" value={ports.length} />
-        <StatCard label="Occupied" value={occupied} valueColor="#854F0B" />
-        <StatCard label="Available" value={available} valueColor="#3B6D11" />
-        <StatCard label="Offline" value={offline} valueColor="#A32D2D" />
-        <StatCard label="Queue length" value={queueDisplay.length} />
-        <StatCard label="Active sessions" value={sessionsDisplay.length} />
-        <StatCard label="Today's sessions" value={sessionsDisplay.length} />
-        <StatCard label="Violations" value={violations.length} valueColor="#A32D2D" />
+        {metricCards.map((card) => (
+          <button
+            key={card.label}
+            className="metric-link-card"
+            type="button"
+            onClick={() => navigate(card.to)}
+          >
+            <StatCard label={card.label} value={card.value} valueColor={card.valueColor} />
+          </button>
+        ))}
       </div>
 
       <div className="card">
         <div className="card-header">
           <div className="card-title">Active sessions</div>
-          <Btn size="sm" onClick={() => navigate("/operator/ports")}>View ports</Btn>
+          <Btn size="sm" onClick={() => navigate("/operator/stations")}>View ports</Btn>
         </div>
         <div className="table-wrap">
           <table>

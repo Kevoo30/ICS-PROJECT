@@ -43,9 +43,6 @@ export default function Login() {
         <p style={{ textAlign: "center", marginTop: "20px", fontSize: ".88rem", color: "var(--text-secondary)" }}>
           No account? <Link className="auth-link" to="/register">Register here</Link>
         </p>
-        <p style={{ textAlign: "center", marginTop: "10px", fontSize: ".8rem", color: "var(--text-secondary)" }}>
-          Demo operator: admin@ev.com / admin123
-        </p>
       </div>
     </div>
   );

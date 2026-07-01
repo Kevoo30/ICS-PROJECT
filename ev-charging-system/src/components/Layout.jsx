@@ -19,7 +19,7 @@ export default function Layout({ children }) {
     { to: "/dashboard", label: "🏠 Dashboard" },
     { to: "/queue", label: "⚡ Charging Queue" },
     { to: "/vehicles", label: "🚗 My Vehicles" },
-    { to: "/history", label: "📋 History" },
+    { to: "/history", label: "📋 Sessions" },
     { to: "/profile", label: "👤 Profile" },
   ];
 
@@ -28,7 +28,7 @@ export default function Layout({ children }) {
     { to: "/operator/queue", label: "⚡ Queue Monitor" },
     { to: "/operator/stations", label: "📍 Stations" },
     { to: "/operator/violations", label: "🚨 Violations" },
-    { to: "/operator/drivers", label: "👥 Drivers" },
+    { to: "/operator/drivers", label: "👥 Sessions" },
   ];
 
   const links = isOperator ? operatorLinks : driverLinks;

@@ -5,6 +5,7 @@ import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 // Auth pages
+import HomePage from "./pages/HomePage";
 import Login from "./pages/Login";
 import Register from "./pages/Register";
 
@@ -30,6 +31,7 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public */}
+      <Route path="/" element={currentUser ? <Navigate to={currentUser.role === "operator" ? "/operator/dashboard" : "/dashboard"} replace /> : <HomePage />} />
       <Route path="/login" element={currentUser ? <Navigate to={currentUser.role === "operator" ? "/operator/dashboard" : "/dashboard"} replace /> : <Login />} />
       <Route
         path="/register"
@@ -57,7 +59,7 @@ function AppRoutes() {
       <Route path="/operator/drivers" element={<ProtectedRoute role="operator"><Layout><OpDrivers /></Layout></ProtectedRoute>} />
 
       {/* Fallback */}
-      <Route path="*" element={<Navigate to={currentUser ? (currentUser.role === "operator" ? "/operator/dashboard" : "/dashboard") : "/login"} replace />} />
+      <Route path="*" element={<Navigate to={currentUser ? (currentUser.role === "operator" ? "/operator/dashboard" : "/dashboard") : "/"} replace />} />
     </Routes>
   );
 }
